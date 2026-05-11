@@ -5,6 +5,9 @@ extends Node
 
 const SAVE_PATH := "user://save.json"
 
+func _ready() -> void:
+	call_deferred("load_save")
+
 func save() -> void:
 	var data: Dictionary = GameState.to_dict()
 	if YandexSDK.is_available():
@@ -23,6 +26,9 @@ func _on_remote_loaded(data) -> void:
 		_load_local()
 		return
 	GameState.from_dict(data)
+	var localization := get_node_or_null("/root/Localization")
+	if localization:
+		localization.apply_saved_language()
 
 func _save_local(data: Dictionary) -> void:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -44,3 +50,6 @@ func _load_local() -> void:
 	if parsed == null or not (parsed is Dictionary):
 		return
 	GameState.from_dict(parsed)
+	var localization := get_node_or_null("/root/Localization")
+	if localization:
+		localization.apply_saved_language()

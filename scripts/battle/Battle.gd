@@ -132,16 +132,16 @@ func _show_chain_rewards(result) -> void:
 	var anchor: Vector2 = result.consumed_positions[0]
 	var pop_index := 0
 	if result.gold_gained > 0:
-		board.show_float_at_grid(anchor, "+%d GILT" % [result.gold_gained], Color(0.98, 0.82, 0.34), Vector2(0, -48 - pop_index * 24))
+		board.show_float_at_grid(anchor, Localization.t("reward.gold", [result.gold_gained]), Color(0.98, 0.82, 0.34), Vector2(0, -48 - pop_index * 24))
 		pop_index += 1
 	if result.shield_gained > 0:
-		board.show_float_at_grid(anchor, "+%d AEGIS" % [result.shield_gained], Color(0.58, 0.76, 1.0), Vector2(0, -48 - pop_index * 24))
+		board.show_float_at_grid(anchor, Localization.t("reward.shield", [result.shield_gained]), Color(0.58, 0.76, 1.0), Vector2(0, -48 - pop_index * 24))
 		pop_index += 1
 	if result.heal_amount > 0:
-		board.show_float_at_grid(anchor, "+%d VITA" % [result.heal_amount], Color(1.0, 0.42, 0.52), Vector2(0, -48 - pop_index * 24))
+		board.show_float_at_grid(anchor, Localization.t("reward.heal", [result.heal_amount]), Color(1.0, 0.42, 0.52), Vector2(0, -48 - pop_index * 24))
 		pop_index += 1
 	if result.crit:
-		board.show_float_at_grid(anchor, "CRIT", Color(1.0, 0.42, 0.20), Vector2(0, -48 - pop_index * 24))
+		board.show_float_at_grid(anchor, Localization.t("combat.crit"), Color(1.0, 0.42, 0.20), Vector2(0, -48 - pop_index * 24))
 
 func _draw_vignette(s: Vector2) -> void:
 	draw_rect(Rect2(Vector2.ZERO, Vector2(s.x, 90)), Color(0, 0, 0, 0.22), true)
@@ -154,7 +154,7 @@ func _start_next_wave() -> void:
 	var wave = WaveCatalogScript.get_wave(next_index)
 	RunState.start_wave(wave.to_dictionary())
 	board.apply_wave_profile(RunState.current_wave, next_index == 1)
-	_show_combo("WAVE %d" % [RunState.wave])
+	_show_combo(Localization.t("hud.wave", [RunState.wave, RunState.rounds_left]))
 
 func _advance_wave_if_needed() -> void:
 	if RunState.boss_active:
@@ -188,5 +188,5 @@ func _start_boss_phase(wave_config: Dictionary) -> void:
 		return
 	RunState.start_boss_phase(int(wave_config.get("boss_turns", 5)))
 	if pos.x >= 0:
-		board.show_float_at_grid(pos, "BOSS", Color(1.0, 0.66, 0.24), Vector2(0, -58))
-	_show_combo("BOSS")
+		board.show_float_at_grid(pos, Localization.t("combat.boss"), Color(1.0, 0.66, 0.24), Vector2(0, -58))
+	_show_combo(Localization.t("combat.boss"))

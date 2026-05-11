@@ -137,7 +137,7 @@ func has_boss() -> bool:
 # Очищает позиции, опускает оставшиеся вниз, спавнит новые сверху.
 # Возвращает массив "движений" для анимации:
 #   [{from: Vector2, to: Vector2}, ...] и {spawned: [{pos, tile}, ...]}.
-func apply_consumed_and_refill(consumed: Array) -> Dictionary:
+func apply_consumed_and_refill(consumed: Array, mark_spawned_enemies_fresh: bool = false) -> Dictionary:
 	for p in consumed:
 		clear_tile(p)
 	var movements := []
@@ -162,6 +162,8 @@ func apply_consumed_and_refill(consumed: Array) -> Dictionary:
 		var spawned := []
 		for y in range(write_y, -1, -1):
 			var t := _make_enemy() if rng.randf() < enemy_spawn_chance else _make_random_basic()
+			if mark_spawned_enemies_fresh and t.kind == TileType.Kind.ENEMY:
+				t["fresh_spawn"] = true
 			grid[y][x] = t
 			spawned.append({"pos": Vector2(x, y), "tile": t})
 		if spawned.size() > 0:
@@ -176,6 +178,9 @@ func tick_enemies() -> Array:
 		for x in range(width):
 			var t = grid[y][x]
 			if t.kind == TileType.Kind.ENEMY:
+				if bool(t.get("fresh_spawn", false)):
+					t.erase("fresh_spawn")
+					continue
 				t.timer -= 1
 				if t.timer <= 0:
 					attackers.append(Vector2(x, y))

@@ -23,6 +23,7 @@ GameState="*res://scripts/core/GameState.gd"
 RunState="*res://scripts/core/RunState.gd"
 SaveSystem="*res://scripts/core/SaveSystem.gd"
 YandexSDK="*res://scripts/core/YandexSDK.gd"
+Localization="*res://scripts/core/Localization.gd"
 
 [display]
 

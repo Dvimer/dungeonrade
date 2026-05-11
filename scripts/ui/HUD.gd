@@ -11,6 +11,8 @@ class_name HUD
 @onready var _sword_value: Label = $Root/Bottom/Right/SwordValue
 @onready var _shield_value: Label = $Root/Top/ShieldGroup/ShieldLabel
 @onready var _rounds_label: Label = $Root/Top/RoundsLabel
+@onready var _title_label: Label = $Root/Top/TitleLabel
+@onready var _subtitle_label: Label = $Root/Top/SubtitleLabel
 
 var _xp_shimmer: ColorRect
 var _last_xp: int = -1
@@ -24,10 +26,15 @@ func _ready() -> void:
 	EventBus.rounds_changed.connect(_on_rounds_changed)
 	EventBus.player_damaged.connect(func(_x): _refresh_all())
 	EventBus.player_healed.connect(func(_x): _refresh_all())
+	Localization.language_changed.connect(func(_language): _refresh_all())
 	_setup_xp_shimmer()
 	_refresh_all()
 
 func _refresh_all() -> void:
+	if _title_label:
+		_title_label.text = Localization.t("hud.title")
+	if _subtitle_label:
+		_subtitle_label.text = Localization.t("hud.subtitle")
 	_on_xp_changed(RunState.xp, RunState.xp_needed_for_next_level())
 	_on_level_up(RunState.level)
 	_on_gold_changed(RunState.gold)
@@ -42,13 +49,13 @@ func _on_xp_changed(current: int, needed: int) -> void:
 		if _last_xp >= 0 and (current > _last_xp or RunState.level > _last_level):
 			_flash_xp_bar()
 	if _xp_label:
-		_xp_label.text = "%d / %d XP" % [current, needed]
+		_xp_label.text = Localization.t("hud.xp", [current, needed])
 	_last_xp = current
 	_last_level = RunState.level
 
 func _on_level_up(new_level: int) -> void:
 	if _level_label:
-		_level_label.text = "Lv. %d" % new_level
+		_level_label.text = Localization.t("hud.level", [new_level])
 
 func _on_gold_changed(value: int) -> void:
 	if _gold_label:
@@ -65,9 +72,9 @@ func _on_shield_changed(value: int) -> void:
 func _on_rounds_changed(value: int) -> void:
 	if _rounds_label:
 		if RunState.boss_active:
-			_rounds_label.text = "BOSS W%d" % [RunState.wave]
+			_rounds_label.text = Localization.t("hud.boss_wave", [RunState.wave])
 		else:
-			_rounds_label.text = "WAVE %d  %d" % [RunState.wave, value]
+			_rounds_label.text = Localization.t("hud.wave", [RunState.wave, value])
 
 func _refresh_sword() -> void:
 	if _sword_value:

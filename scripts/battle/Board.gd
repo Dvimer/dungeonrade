@@ -32,7 +32,6 @@ const HOVER_RULES := {
 	TileType.Kind.SWORD: {
 		"hoverable": true,
 		"keep_kinds": [TileType.Kind.SWORD, TileType.Kind.ENEMY],
-		"show_sword_power": true,
 	},
 	TileType.Kind.SHIELD: {
 		"hoverable": true,
@@ -340,7 +339,7 @@ func play_enemy_attacks(attackers: Array) -> void:
 
 # Применить расход тайлов и пополнение, обновить визуал.
 # (Анимации опускания пока без интерполяции — для прототипа достаточно.)
-func consume_and_refill(consumed: Array) -> void:
+func consume_and_refill(consumed: Array, mark_spawned_enemies_fresh: bool = false) -> void:
 	if is_animating:
 		return
 	is_animating = true
@@ -358,7 +357,7 @@ func consume_and_refill(consumed: Array) -> void:
 			row.append(null)
 		new_tiles.append(row)
 
-	var result: Dictionary = logic.apply_consumed_and_refill(consumed)
+	var result: Dictionary = logic.apply_consumed_and_refill(consumed, mark_spawned_enemies_fresh)
 	var tween := create_tween().set_parallel(true)
 
 	for y in range(board_height):
@@ -552,20 +551,22 @@ func _show_sword_power(world_point: Vector2) -> void:
 	var sword_count: int = _count_tiles_of_kind(TileType.Kind.SWORD)
 	var sword_power: int = 1 + int(RunState.mod("sword_damage_bonus", 0))
 	var total_power: int = sword_power * sword_count
-	_hover_info_label.text = "Might %d x %d = %d" % [sword_power, sword_count, total_power]
+	_hover_info_label.text = Localization.t("preview.might", [sword_power, sword_count, total_power])
 	_hover_info_panel.visible = true
 	_update_hover_info_position(world_point)
 
 func _show_monster_info(tile: Tile, world_point: Vector2) -> void:
 	if _hover_info_label == null or _hover_info_panel == null:
 		return
-	var name := str(tile.data.get("monster_name", "Boss")).to_upper()
-	_hover_info_label.text = "%s\nHP %d  ATK %d  TIMER %d" % [
+	var monster_id := str(tile.data.get("monster_id", ""))
+	var fallback_name := str(tile.data.get("monster_name", "Boss"))
+	var name := Localization.monster_name(monster_id, fallback_name).to_upper()
+	_hover_info_label.text = Localization.t("monster.info", [
 		name,
 		int(tile.data.get("hp", 0)),
 		int(tile.data.get("dmg", 0)),
 		int(tile.data.get("timer", 0)),
-	]
+	])
 	_hover_info_panel.visible = true
 	_update_hover_info_position(world_point)
 
@@ -594,18 +595,18 @@ func show_chain_preview(path: Array, world_point: Vector2) -> void:
 		return
 	var start_tile := logic.get_tile(path[0])
 	var kind: int = int(start_tile.kind)
-	var amount: int = path.size()
+	var amount: int = _count_chain_kind(path, kind)
 	var text := ""
 	match kind:
 		TileType.Kind.SWORD:
 			var sword_power: int = 1 + int(RunState.mod("sword_damage_bonus", 0))
-			text = "ATK +%d" % [sword_power * amount]
+			text = Localization.t("preview.attack", [sword_power * amount])
 		TileType.Kind.HEART:
-			text = "HP +%d" % [amount]
+			text = Localization.t("preview.heal", [amount])
 		TileType.Kind.SHIELD:
-			text = "Shield +%d" % [amount]
+			text = Localization.t("preview.shield", [amount])
 		TileType.Kind.COIN:
-			text = "Gold +%d" % [amount]
+			text = Localization.t("preview.gold", [amount])
 		_:
 			text = "+%d" % [amount]
 	_hover_info_label.text = text
@@ -627,6 +628,13 @@ func _on_enemy_damaged(pos: Vector2, _dmg: int) -> void:
 	tween.tween_property(node, "position", original, 0.04)
 	tween.tween_property(node, "modulate", Color.WHITE, 0.12)
 	show_float_at_grid(pos, "-%d" % [_dmg], Color(1.0, 0.34, 0.24), Vector2(0, -42))
+
+func _count_chain_kind(path: Array, kind: int) -> int:
+	var count := 0
+	for p in path:
+		if logic.get_tile(p).kind == kind:
+			count += 1
+	return count
 
 func show_float_at_grid(pos: Vector2, text: String, color: Color, offset: Vector2 = Vector2.ZERO) -> void:
 	var label := Label.new()

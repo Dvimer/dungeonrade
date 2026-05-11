@@ -16,7 +16,6 @@ const COMBO_THRESHOLDS := [
 
 static func resolve(board: BoardLogic, path: Array, run: Node) -> ChainResult:
 	var result := ChainResult.new()
-	result.chain_length = path.size()
 	result.consumed_positions = path.duplicate()
 
 	var swords := 0
@@ -37,11 +36,13 @@ static func resolve(board: BoardLogic, path: Array, run: Node) -> ChainResult:
 				hearts += 1
 			TileType.Kind.ENEMY:
 				result.enemies_in_chain.append(p)
+	var resource_count := swords + shields + coins + hearts
+	result.chain_length = resource_count
 
 	# --- Множители комбо ---
 	var mult: float = 1.0
 	for tier in COMBO_THRESHOLDS:
-		if path.size() >= tier.len:
+		if resource_count >= tier.len:
 			mult = tier.mult
 			result.label = tier.label
 			break

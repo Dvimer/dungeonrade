@@ -21,6 +21,16 @@ func is_available() -> bool:
 	# В Godot 4 фича называется "web" (HTML5 — alias).
 	return OS.has_feature("web") and Engine.has_singleton("YandexSDK")
 
+func get_language() -> String:
+	if not is_available():
+		return ""
+	var sdk = Engine.get_singleton("YandexSDK")
+	if sdk != null and sdk.has_method("get_language"):
+		return str(sdk.call("get_language"))
+	if sdk != null and sdk.has_method("get_lang"):
+		return str(sdk.call("get_lang"))
+	return ""
+
 func _emit_ready() -> void:
 	_ready_state = true
 	sdk_ready.emit()

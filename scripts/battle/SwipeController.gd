@@ -141,7 +141,7 @@ func _finish() -> void:
 
 	var result := ChainResolver.resolve(board.logic, path, RunState)
 	var consumed: Array = ChainResolver.apply(board.logic, result, RunState)
-	await board.consume_and_refill(consumed)
+	await board.consume_and_refill(consumed, true)
 	path.clear()
 	EventBus.chain_resolved.emit(result)
 	EventBus.turn_ended.emit()

@@ -22,12 +22,12 @@ const RIM_COLORS := {
 	TileType.Kind.EMPTY:  Color(0.26, 0.28, 0.34),
 }
 
-const KIND_LABELS := {
-	TileType.Kind.SWORD: "BLADE",
-	TileType.Kind.SHIELD: "AEGIS",
-	TileType.Kind.COIN: "GILT",
-	TileType.Kind.HEART: "VITA",
-	TileType.Kind.ENEMY: "FOE",
+const KIND_LABEL_KEYS := {
+	TileType.Kind.SWORD: "tile.sword",
+	TileType.Kind.SHIELD: "tile.shield",
+	TileType.Kind.COIN: "tile.coin",
+	TileType.Kind.HEART: "tile.heart",
+	TileType.Kind.ENEMY: "tile.enemy",
 }
 
 const COLOR_STONE_DARK := Color(0.035, 0.035, 0.045)
@@ -90,7 +90,7 @@ func _ready() -> void:
 
 	# Полоска статов — снизу тайла, только для врагов.
 	_stats.size = Vector2(tile_size - 16.0, tile_size * 0.23)
-	_stats.position = Vector2(-_stats.size.x / 2.0, tile_size / 2.0 - _stats.size.y - 8)
+	_stats.position = Vector2(-_stats.size.x / 2.0, tile_size / 2.0 - _stats.size.y - 12)
 	_stats_base_position = _stats.position
 	_stats.add_theme_color_override("font_color", COLOR_INK)
 	_stats.add_theme_font_size_override("font_size", 14)
@@ -98,7 +98,7 @@ func _ready() -> void:
 
 	_kind_label = Label.new()
 	_kind_label.size = Vector2(tile_size, 18)
-	_kind_label.position = Vector2(-tile_size / 2.0, tile_size / 2.0 - 24.0)
+	_kind_label.position = Vector2(-tile_size / 2.0, tile_size / 2.0 - 30.0)
 	_label_base_position = _kind_label.position
 	_kind_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_kind_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -125,6 +125,7 @@ func _ready() -> void:
 		_selected_strike.width = 4.0
 
 	update_view(data)
+	Localization.language_changed.connect(func(_language): update_view(data))
 
 func setup(pos: Vector2, tile_data: Dictionary) -> void:
 	board_pos = pos
@@ -164,7 +165,7 @@ func update_view(tile_data: Dictionary) -> void:
 	if _stats:
 		if k == TileType.Kind.ENEMY:
 			if bool(data.get("is_boss", false)):
-				_stats.text = "BOSS"
+				_stats.text = Localization.t("tile.boss")
 			else:
 				_stats.text = "%d  %d  %d" % [
 					int(data.get("hp", 0)),
@@ -176,7 +177,8 @@ func update_view(tile_data: Dictionary) -> void:
 			_stats.text = ""
 			_stats.visible = false
 	if _kind_label:
-		_kind_label.text = KIND_LABELS.get(k, "")
+		var label_key := str(KIND_LABEL_KEYS.get(k, ""))
+		_kind_label.text = Localization.t(label_key) if label_key != "" else ""
 		_kind_label.visible = k != TileType.Kind.EMPTY and k != TileType.Kind.ENEMY
 	queue_redraw()
 
