@@ -1,0 +1,19 @@
+# Godot 3.6 ignore
+.import/
+export.cfg
+export_presets.cfg
+*.translation
+.godot/
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Build output
+builds/
+exports/
