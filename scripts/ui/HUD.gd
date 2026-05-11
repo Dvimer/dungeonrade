@@ -64,7 +64,10 @@ func _on_shield_changed(value: int) -> void:
 
 func _on_rounds_changed(value: int) -> void:
 	if _rounds_label:
-		_rounds_label.text = "ROUND %d" % value
+		if RunState.boss_active:
+			_rounds_label.text = "BOSS W%d" % [RunState.wave]
+		else:
+			_rounds_label.text = "WAVE %d  %d" % [RunState.wave, value]
 
 func _refresh_sword() -> void:
 	if _sword_value:

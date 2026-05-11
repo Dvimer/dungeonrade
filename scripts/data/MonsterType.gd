@@ -17,6 +17,7 @@ var hit_timer_reset: int = 3
 var remove_on_attack: bool = true
 var heal_on_attack: bool = false
 var heal_on_attack_ratio: float = 1.0
+var is_boss: bool = false
 var spawn_weight: int = 1
 var xp_bonus: int = 0
 var gold_bonus: int = 0
@@ -36,6 +37,7 @@ func _init(data: Dictionary = {}) -> void:
 	remove_on_attack = bool(data.get("remove_on_attack", remove_on_attack))
 	heal_on_attack = bool(data.get("heal_on_attack", heal_on_attack))
 	heal_on_attack_ratio = float(data.get("heal_on_attack_ratio", heal_on_attack_ratio))
+	is_boss = bool(data.get("is_boss", is_boss))
 	spawn_weight = int(data.get("spawn_weight", spawn_weight))
 	xp_bonus = int(data.get("xp_bonus", xp_bonus))
 	gold_bonus = int(data.get("gold_bonus", gold_bonus))
@@ -58,6 +60,7 @@ func to_enemy_tile() -> Dictionary:
 		"remove_on_attack": remove_on_attack,
 		"heal_on_attack": heal_on_attack,
 		"heal_on_attack_ratio": heal_on_attack_ratio,
+		"is_boss": is_boss,
 		"xp_bonus": xp_bonus,
 		"gold_bonus": gold_bonus,
 		"tile_color": tile_color,

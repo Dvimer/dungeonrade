@@ -15,6 +15,8 @@ var score: int = 0
 var level: int = 1
 var xp: int = 0
 var rounds_left: int = ROUNDS_DEFAULT
+var current_wave: Dictionary = {}
+var boss_active: bool = false
 
 # Активные модификаторы боя — их читает ChainResolver.
 # Например: {"sword_damage_bonus": 2, "crit_chance": 0.15, "vampirism": 0.1}
@@ -30,10 +32,29 @@ func reset() -> void:
 	score = 0
 	level = 1
 	xp = 0
-	rounds_left = ROUNDS_DEFAULT
+	rounds_left = 0
+	current_wave = {}
+	boss_active = false
 	modifiers = {}
 	active_class = GameState.selected_class
 	EventBus.emit_signal("rounds_changed", rounds_left)
+
+func start_wave(wave_config: Dictionary) -> void:
+	current_wave = wave_config.duplicate(true)
+	wave = int(current_wave.get("index", wave + 1))
+	rounds_left = int(current_wave.get("turns", ROUNDS_DEFAULT))
+	boss_active = false
+	EventBus.emit_signal("rounds_changed", rounds_left)
+	EventBus.emit_signal("wave_started", wave)
+
+func start_boss_phase(turns: int) -> void:
+	rounds_left = maxi(1, turns)
+	boss_active = true
+	EventBus.emit_signal("rounds_changed", rounds_left)
+
+func clear_wave() -> void:
+	boss_active = false
+	EventBus.emit_signal("wave_cleared", wave)
 
 func xp_needed_for_next_level() -> int:
 	# Простая формула: 100 * level. Можно крутить.
@@ -88,5 +109,11 @@ func add_gold(amount: int) -> void:
 	EventBus.emit_signal("gold_changed", gold)
 
 func spend_round(amount: int = 1) -> void:
+	if boss_active:
+		EventBus.emit_signal("rounds_changed", rounds_left)
+		return
 	rounds_left = maxi(0, rounds_left - amount)
 	EventBus.emit_signal("rounds_changed", rounds_left)
+
+func is_wave_timer_done() -> bool:
+	return rounds_left <= 0

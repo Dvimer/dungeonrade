@@ -10,6 +10,7 @@ var height: int
 var grid: Array = []     # Array[Array[Dictionary]]
 var rng := RandomNumberGenerator.new()
 var enemy_spawn_chance: float = 0.0
+var monster_weights: Dictionary = {}
 
 func _init(w: int = 6, h: int = 6, rng_seed: int = 0) -> void:
 	width = w
@@ -105,7 +106,32 @@ func _make_random_basic() -> Dictionary:
 	return {"kind": TileType.Kind.SWORD}
 
 func _make_enemy(monster_id: String = "") -> Dictionary:
-	return MonsterCatalog.make_enemy_tile(rng, monster_id)
+	return MonsterCatalog.make_enemy_tile(rng, monster_id, monster_weights)
+
+func configure_spawn(enemy_chance: float, weights: Dictionary = {}) -> void:
+	enemy_spawn_chance = enemy_chance
+	monster_weights = weights.duplicate(true)
+
+func spawn_enemy(monster_id: String) -> Vector2:
+	var candidates := []
+	for y in range(height):
+		for x in range(width):
+			var p := Vector2(x, y)
+			if get_tile(p).kind != TileType.Kind.ENEMY:
+				candidates.append(p)
+	if candidates.is_empty():
+		return Vector2(-1, -1)
+	var pos: Vector2 = candidates[rng.randi_range(0, candidates.size() - 1)]
+	set_tile(pos, _make_enemy(monster_id))
+	return pos
+
+func has_boss() -> bool:
+	for y in range(height):
+		for x in range(width):
+			var t = grid[y][x]
+			if t.kind == TileType.Kind.ENEMY and bool(t.get("is_boss", false)):
+				return true
+	return false
 
 # --- Гравитация и пополнение поля после хода ---
 # Очищает позиции, опускает оставшиеся вниз, спавнит новые сверху.

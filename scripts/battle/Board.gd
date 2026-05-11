@@ -131,6 +131,41 @@ func _spawn_tiles() -> void:
 			row.append(t)
 		tiles.append(row)
 
+func apply_wave_profile(wave_config: Dictionary, refill_board: bool = false) -> void:
+	if logic == null:
+		return
+	logic.configure_spawn(
+		float(wave_config.get("enemy_spawn_chance", logic.enemy_spawn_chance)),
+		wave_config.get("monster_weights", {})
+	)
+	if refill_board:
+		logic.fill_random(logic.enemy_spawn_chance)
+		sync_view()
+
+func spawn_monster(monster_id: String) -> Vector2:
+	if logic == null:
+		return Vector2(-1, -1)
+	var pos := logic.spawn_enemy(monster_id)
+	if pos.x >= 0:
+		sync_view()
+		var node := get_tile_node(pos)
+		if node:
+			node.z_index = 160
+			node.scale = Vector2(0.7, 0.7)
+			node.modulate = Color(1.35, 0.82, 0.38, 1.0)
+			var tween := create_tween().set_parallel(true)
+			tween.tween_property(node, "scale", Vector2(1.18, 1.18), 0.16) \
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			tween.tween_property(node, "scale", Vector2.ONE, 0.12).set_delay(0.16) \
+				.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			tween.tween_property(node, "modulate", Color.WHITE, 0.22) \
+				.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			tween.chain().tween_callback(func():
+				if is_instance_valid(node):
+					node.z_index = 0
+			)
+	return pos
+
 # Локальные координаты тайла (центрированная раскладка).
 func _grid_to_local(p: Vector2) -> Vector2:
 	var step := tile_size + tile_spacing
@@ -224,7 +259,7 @@ func unfocus_all() -> void:
 # Подсвечивает рамкой тайл под курсором мыши. На сенсоре не используется.
 func set_hover_at_world(world_point: Vector2) -> void:
 	var t: Tile = get_tile_at_world(world_point)
-	if t != null and not _is_hoverable_kind(t.data.kind):
+	if t != null and not _is_hoverable_tile(t):
 		t = null
 	var new_pos: Vector2 = t.board_pos if t != null else Vector2(-1, -1)
 	if new_pos == _hover_pos:
@@ -456,6 +491,9 @@ func _apply_hover_rule(tile: Tile, world_point: Vector2) -> void:
 	if tile == null:
 		return
 	var rule: Dictionary = HOVER_RULES.get(tile.data.kind, {})
+	if tile.data.kind == TileType.Kind.ENEMY and bool(tile.data.get("is_boss", false)):
+		_show_monster_info(tile, world_point)
+		return
 	if bool(rule.get("show_sword_power", false)):
 		_show_sword_power(world_point)
 
@@ -486,6 +524,13 @@ func _is_hoverable_kind(kind: int) -> bool:
 	var rule: Dictionary = HOVER_RULES.get(kind, {})
 	return bool(rule.get("hoverable", true))
 
+func _is_hoverable_tile(tile: Tile) -> bool:
+	if tile == null:
+		return false
+	if tile.data.kind == TileType.Kind.ENEMY:
+		return bool(tile.data.get("is_boss", false))
+	return _is_hoverable_kind(tile.data.kind)
+
 func _setup_hover_info() -> void:
 	_hover_info_panel = PanelContainer.new()
 	_hover_info_panel.visible = false
@@ -508,6 +553,19 @@ func _show_sword_power(world_point: Vector2) -> void:
 	var sword_power: int = 1 + int(RunState.mod("sword_damage_bonus", 0))
 	var total_power: int = sword_power * sword_count
 	_hover_info_label.text = "Might %d x %d = %d" % [sword_power, sword_count, total_power]
+	_hover_info_panel.visible = true
+	_update_hover_info_position(world_point)
+
+func _show_monster_info(tile: Tile, world_point: Vector2) -> void:
+	if _hover_info_label == null or _hover_info_panel == null:
+		return
+	var name := str(tile.data.get("monster_name", "Boss")).to_upper()
+	_hover_info_label.text = "%s\nHP %d  ATK %d  TIMER %d" % [
+		name,
+		int(tile.data.get("hp", 0)),
+		int(tile.data.get("dmg", 0)),
+		int(tile.data.get("timer", 0)),
+	]
 	_hover_info_panel.visible = true
 	_update_hover_info_position(world_point)
 

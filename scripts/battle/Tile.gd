@@ -163,11 +163,14 @@ func update_view(tile_data: Dictionary) -> void:
 		_icon.modulate = Color(1, 0.82, 0.82) if k == TileType.Kind.ENEMY and int(data.get("timer", 3)) <= 1 else Color.WHITE
 	if _stats:
 		if k == TileType.Kind.ENEMY:
-			_stats.text = "HP %d  ATK %d  T %d" % [
-				int(data.get("hp", 0)),
-				int(data.get("dmg", 0)),
-				int(data.get("timer", 0)),
-			]
+			if bool(data.get("is_boss", false)):
+				_stats.text = "BOSS"
+			else:
+				_stats.text = "%d  %d  %d" % [
+					int(data.get("hp", 0)),
+					int(data.get("dmg", 0)),
+					int(data.get("timer", 0)),
+				]
 			_stats.visible = true
 		else:
 			_stats.text = ""

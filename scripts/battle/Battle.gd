@@ -6,10 +6,14 @@ extends Node2D
 @export var board_path: NodePath
 @export var hud_path: NodePath
 
+const WaveCatalogScript := preload("res://scripts/data/WaveCatalog.gd")
+
 @onready var board: Board = get_node(board_path)
 @onready var hud: Node = get_node(hud_path) if hud_path != NodePath("") else null
 
 var _combo_label: Label
+var _boss_killed_this_turn: bool = false
+
 func _ready() -> void:
 	RunState.reset()
 	EventBus.turn_ended.connect(_on_turn_ended)
@@ -17,6 +21,7 @@ func _ready() -> void:
 	EventBus.player_damaged.connect(_on_player_damaged)
 	EventBus.player_died.connect(_on_player_died)
 	_setup_combo_label()
+	_start_next_wave()
 	queue_redraw()
 
 func _draw() -> void:
@@ -64,6 +69,7 @@ func _on_turn_ended() -> void:
 		await board.consume_and_refill(consumed_attackers)
 	else:
 		board.sync_view()
+	_advance_wave_if_needed()
 
 func _on_chain_resolved(result) -> void:
 	# Сюда повесим juicy-эффекты: тряска, текст комбо, slow-mo.
@@ -75,6 +81,8 @@ func _on_chain_resolved(result) -> void:
 	var xp_gain: int = result.chain_length * 2
 	for enemy in result.killed_enemies:
 		xp_gain += 5 + int(enemy.get("xp_bonus", 0))
+		if bool(enemy.get("is_boss", false)):
+			_boss_killed_this_turn = true
 	if xp_gain > 0:
 		RunState.add_xp(xp_gain)
 
@@ -140,3 +148,45 @@ func _draw_vignette(s: Vector2) -> void:
 	draw_rect(Rect2(Vector2(0, s.y - 110), Vector2(s.x, 110)), Color(0, 0, 0, 0.30), true)
 	draw_rect(Rect2(Vector2.ZERO, Vector2(38, s.y)), Color(0, 0, 0, 0.28), true)
 	draw_rect(Rect2(Vector2(s.x - 38, 0), Vector2(38, s.y)), Color(0, 0, 0, 0.28), true)
+
+func _start_next_wave() -> void:
+	var next_index := RunState.wave + 1
+	var wave = WaveCatalogScript.get_wave(next_index)
+	RunState.start_wave(wave.to_dictionary())
+	board.apply_wave_profile(RunState.current_wave, next_index == 1)
+	_show_combo("WAVE %d" % [RunState.wave])
+
+func _advance_wave_if_needed() -> void:
+	if RunState.boss_active:
+		if board.logic.has_boss():
+			_boss_killed_this_turn = false
+			return
+		_boss_killed_this_turn = false
+		RunState.clear_wave()
+		_start_next_wave()
+		return
+	if not RunState.is_wave_timer_done():
+		return
+	var wave_config := RunState.current_wave
+	if _should_start_boss(wave_config):
+		_start_boss_phase(wave_config)
+	else:
+		RunState.clear_wave()
+		_start_next_wave()
+
+func _should_start_boss(wave_config: Dictionary) -> bool:
+	var boss_id := str(wave_config.get("boss_id", ""))
+	var chance := float(wave_config.get("boss_chance", 0.0))
+	return boss_id != "" and board.logic.rng.randf() < chance
+
+func _start_boss_phase(wave_config: Dictionary) -> void:
+	var boss_id := str(wave_config.get("boss_id", ""))
+	var pos := board.spawn_monster(boss_id)
+	if pos.x < 0:
+		RunState.clear_wave()
+		_start_next_wave()
+		return
+	RunState.start_boss_phase(int(wave_config.get("boss_turns", 5)))
+	if pos.x >= 0:
+		board.show_float_at_grid(pos, "BOSS", Color(1.0, 0.66, 0.24), Vector2(0, -58))
+	_show_combo("BOSS")
