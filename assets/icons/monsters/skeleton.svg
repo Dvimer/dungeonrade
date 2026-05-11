@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bone" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#f4eee2"/>
+      <stop offset="1" stop-color="#8a8377"/>
+    </linearGradient>
+    <radialGradient id="eye" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#ff5040"/>
+      <stop offset=".6" stop-color="#7a0c08"/>
+      <stop offset="1" stop-color="#000"/>
+    </radialGradient>
+  </defs>
+  <path d="M32 4 C14 4 8 18 8 30 C8 38 12 44 16 48 L16 56 L24 56 L24 50 L40 50 L40 56 L48 56 L48 48 C52 44 56 38 56 30 C56 18 50 4 32 4 Z" fill="url(#bone)" stroke="#080a10" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M22 8 L26 14 L22 18 M40 6 L38 12 L42 16" fill="none" stroke="#080a10" stroke-width="1" opacity=".6"/>
+  <ellipse cx="22" cy="28" rx="6.5" ry="7.5" fill="#080a10"/>
+  <ellipse cx="42" cy="28" rx="6.5" ry="7.5" fill="#080a10"/>
+  <circle cx="22" cy="29" r="3" fill="url(#eye)"/>
+  <circle cx="42" cy="29" r="3" fill="url(#eye)"/>
+  <polygon points="32,36 28,42 32,44 36,42" fill="#080a10"/>
+  <rect x="22" y="48" width="20" height="3" fill="#080a10"/>
+  <rect x="24" y="48" width="2" height="6" fill="#e8e0cf"/>
+  <rect x="28" y="48" width="2" height="6" fill="#e8e0cf"/>
+  <rect x="32" y="48" width="2" height="6" fill="#e8e0cf"/>
+  <rect x="36" y="48" width="2" height="6" fill="#e8e0cf"/>
+  <rect x="40" y="48" width="2" height="6" fill="#e8e0cf"/>
+</svg>

@@ -1,0 +1,20 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/battle/Battle.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/battle/Board.tscn" id="2"]
+[ext_resource type="Script" path="res://scripts/battle/SwipeController.gd" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/ui/HUD.tscn" id="4"]
+
+[node name="Battle" type="Node2D"]
+script = ExtResource("1")
+board_path = NodePath("Board")
+hud_path = NodePath("HUD")
+
+[node name="Board" parent="." instance=ExtResource("2")]
+position = Vector2(360, 500)
+
+[node name="SwipeController" type="Node2D" parent="."]
+script = ExtResource("3")
+board_path = NodePath("../Board")
+
+[node name="HUD" parent="." instance=ExtResource("4")]

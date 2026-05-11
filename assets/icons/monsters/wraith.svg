@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="cloak" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#7fa8ff"/>
+      <stop offset=".35" stop-color="#26365f"/>
+      <stop offset="1" stop-color="#080a16"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#d6f0ff"/>
+      <stop offset=".5" stop-color="#63a6ff"/>
+      <stop offset="1" stop-color="#071020"/>
+    </radialGradient>
+  </defs>
+  <path d="M32 5 C18 7 12 20 12 35 L12 57 L22 50 L28 60 L34 50 L42 60 L44 49 L52 56 L52 35 C52 20 46 7 32 5 Z" fill="url(#cloak)" stroke="#080a10" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M20 27 Q32 14 44 27 Q40 23 32 23 Q24 23 20 27 Z" fill="#080a10" opacity=".75"/>
+  <circle cx="25" cy="34" r="4" fill="url(#glow)"/>
+  <circle cx="39" cy="34" r="4" fill="url(#glow)"/>
+  <path d="M25 45 Q32 49 39 45" fill="none" stroke="#91c7ff" stroke-width="1.8" opacity=".65" stroke-linecap="round"/>
+  <path d="M15 39 Q23 44 19 53 M49 39 Q41 44 45 53" fill="none" stroke="#91c7ff" stroke-width="1.4" opacity=".45"/>
+</svg>
