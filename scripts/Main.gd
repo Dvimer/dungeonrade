@@ -69,6 +69,7 @@ var _crypt_play_button: Button = null
 var _crypt_active_tab: String = "equipment"
 var _class_select_panel: PanelContainer = null
 var _pending_level_id: String = ""
+var _class_select_grid: GridContainer = null
 var _ui_texture_cache: Dictionary = {}
 
 func _ready() -> void:
@@ -177,6 +178,7 @@ func _start_level(level_id: String) -> void:
 	var unlocked := ClassCatalogScript.get_all_classes().filter(func(c): return ClassCatalogScript.is_unlocked(str(c.get("id", ""))))
 	if unlocked.size() > 1:
 		_pending_level_id = level_id
+		_refresh_class_select_grid()
 		_class_select_panel.visible = true
 		_level_list_panel.visible = false
 		_skills_panel.visible = false
@@ -758,6 +760,7 @@ func _build_class_select_panel() -> void:
 	vbox.add_child(title)
 
 	var grid := GridContainer.new()
+	_class_select_grid = grid
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 14)
 	grid.add_theme_constant_override("v_separation", 14)
@@ -788,6 +791,27 @@ func _build_class_select_panel() -> void:
 		_pending_level_id = ""
 	)
 	vbox.add_child(back_btn)
+
+func _refresh_class_select_grid() -> void:
+	if _class_select_grid == null:
+		return
+	_clear_container(_class_select_grid)
+	for class_def in ClassCatalogScript.get_all_classes():
+		var class_id := str(class_def.get("id", "warrior"))
+		if not ClassCatalogScript.is_unlocked(class_id):
+			continue
+		var btn := Button.new()
+		btn.custom_minimum_size = Vector2(290, 90)
+		btn.add_theme_font_size_override("font_size", 17)
+		var icon := str(class_def.get("icon_text", "?"))
+		var name_text := str(class_def.get("title", class_id))
+		var desc := str(class_def.get("description", ""))
+		btn.text = "%s  %s\n%s" % [icon, name_text, desc]
+		btn.clip_text = false
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn.modulate = ClassCatalogScript.rarity_color_for(class_id)
+		btn.pressed.connect(_on_class_selected.bind(class_id))
+		_class_select_grid.add_child(btn)
 
 func _on_class_selected(class_id: String) -> void:
 	GameState.selected_class = class_id
@@ -952,7 +976,7 @@ func _make_crypt_class_card(class_def: Dictionary) -> PanelContainer:
 		action_btn.pressed.connect(_select_class.bind(class_id, panel))
 	elif GameState.boss_tokens >= cost:
 		action_btn.text = "Unlock  (%d token%s)" % [cost, "s" if cost > 1 else ""]
-		action_btn.pressed.connect(_unlock_class.bind(class_id, cost, action_btn))
+		action_btn.pressed.connect(_unlock_class.bind(class_id, cost, action_btn, panel))
 	else:
 		action_btn.text = "Locked  (%d token%s needed)" % [cost, "s" if cost > 1 else ""]
 		action_btn.disabled = true
@@ -960,7 +984,7 @@ func _make_crypt_class_card(class_def: Dictionary) -> PanelContainer:
 	vbox.add_child(action_btn)
 	return panel
 
-func _unlock_class(class_id: String, cost: int, btn: Button) -> void:
+func _unlock_class(class_id: String, cost: int, btn: Button, panel: Node) -> void:
 	if GameState.boss_tokens < cost:
 		return
 	GameState.boss_tokens -= cost
@@ -969,8 +993,8 @@ func _unlock_class(class_id: String, cost: int, btn: Button) -> void:
 	_crypt_tokens_label.text = "Tokens: %d" % GameState.boss_tokens
 	btn.text = "Select"
 	btn.set_pressed_no_signal(false)
-	btn.pressed.disconnect(_unlock_class.bind(class_id, cost, btn))
-	btn.pressed.connect(_select_class.bind(class_id, btn.get_parent().get_parent().get_parent()))
+	btn.pressed.disconnect(_unlock_class.bind(class_id, cost, btn, panel))
+	btn.pressed.connect(_select_class.bind(class_id, panel))
 
 func _select_class(class_id: String, _panel: Node) -> void:
 	GameState.selected_class = class_id
