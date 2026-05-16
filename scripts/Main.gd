@@ -5,6 +5,7 @@ const LevelCatalogScript := preload("res://scripts/data/LevelCatalog.gd")
 const LevelTypeScript := preload("res://scripts/data/LevelType.gd")
 const SkillCatalogScript := preload("res://scripts/data/SkillCatalog.gd")
 const EquipmentCatalogScript := preload("res://scripts/data/EquipmentCatalog.gd")
+const ClassCatalogScript := preload("res://scripts/data/ClassCatalog.gd")
 
 const DEV_LEVELS_OPEN := true
 
@@ -793,10 +794,159 @@ func _unlock_item(item_id: String, cost: int, btn: Button) -> void:
 	btn.set_pressed_no_signal(false)
 
 func _build_crypt_classes_tab() -> void:
-	pass
+	var header := Label.new()
+	header.text = "Unlock classes with Boss Tokens earned by killing bosses."
+	header.add_theme_color_override("font_color", Color(0.78, 0.78, 0.78, 1.0))
+	header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_crypt_content_box.add_child(header)
+
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 16)
+	_crypt_content_box.add_child(grid)
+
+	for class_def in ClassCatalogScript.get_all_classes():
+		grid.add_child(_make_crypt_class_card(class_def))
+
+func _make_crypt_class_card(class_def: Dictionary) -> PanelContainer:
+	var class_id := str(class_def.get("id", "warrior"))
+	var cost := int(class_def.get("token_cost", 0))
+	var is_unlocked := ClassCatalogScript.is_unlocked(class_id)
+	var is_selected := GameState.selected_class == class_id
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(460, 130)
+
+	var m := MarginContainer.new()
+	m.add_theme_constant_override("margin_left", 16)
+	m.add_theme_constant_override("margin_top", 14)
+	m.add_theme_constant_override("margin_right", 16)
+	m.add_theme_constant_override("margin_bottom", 14)
+	panel.add_child(m)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 6)
+	m.add_child(vbox)
+
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 12)
+	vbox.add_child(title_row)
+
+	var icon_label := Label.new()
+	icon_label.text = str(class_def.get("icon_text", "?"))
+	icon_label.add_theme_font_size_override("font_size", 28)
+	icon_label.add_theme_color_override("font_color", ClassCatalogScript.rarity_color_for(class_id))
+	title_row.add_child(icon_label)
+
+	var name_label := Label.new()
+	name_label.text = str(class_def.get("title", class_id))
+	name_label.add_theme_font_size_override("font_size", 24)
+	name_label.add_theme_color_override("font_color", Color(0.952941, 0.823529, 0.478431, 1.0))
+	title_row.add_child(name_label)
+
+	var desc_label := Label.new()
+	desc_label.text = str(class_def.get("description", ""))
+	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc_label.add_theme_color_override("font_color", Color(0.86, 0.86, 0.86, 1.0))
+	vbox.add_child(desc_label)
+
+	var action_btn := Button.new()
+	action_btn.custom_minimum_size = Vector2(0, 40)
+	action_btn.add_theme_font_size_override("font_size", 17)
+
+	if is_unlocked and is_selected:
+		action_btn.text = "[Selected]"
+		action_btn.disabled = true
+	elif is_unlocked:
+		action_btn.text = "Select"
+		action_btn.pressed.connect(_select_class.bind(class_id, panel))
+	elif GameState.boss_tokens >= cost:
+		action_btn.text = "Unlock  (%d token%s)" % [cost, "s" if cost > 1 else ""]
+		action_btn.pressed.connect(_unlock_class.bind(class_id, cost, action_btn))
+	else:
+		action_btn.text = "Locked  (%d token%s needed)" % [cost, "s" if cost > 1 else ""]
+		action_btn.disabled = true
+
+	vbox.add_child(action_btn)
+	return panel
+
+func _unlock_class(class_id: String, cost: int, btn: Button) -> void:
+	if GameState.boss_tokens < cost:
+		return
+	GameState.boss_tokens -= cost
+	GameState.unlocked_classes.append(class_id)
+	SaveSystem.save()
+	_crypt_tokens_label.text = "Tokens: %d" % GameState.boss_tokens
+	btn.text = "Select"
+	btn.set_pressed_no_signal(false)
+	btn.pressed.disconnect(_unlock_class.bind(class_id, cost, btn))
+	btn.pressed.connect(_select_class.bind(class_id, btn.get_parent().get_parent().get_parent()))
+
+func _select_class(class_id: String, _panel: Node) -> void:
+	GameState.selected_class = class_id
+	SaveSystem.save()
+	_crypt_switch_tab("classes")
 
 func _build_crypt_skills_tab() -> void:
-	pass
+	var header := Label.new()
+	header.text = "Unlock skills to add them to your in-run skill pool. Cost: 20 skulls each."
+	header.add_theme_color_override("font_color", Color(0.78, 0.78, 0.78, 1.0))
+	header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_crypt_content_box.add_child(header)
+
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	_crypt_content_box.add_child(grid)
+
+	for skill in SkillCatalogScript.get_all_skills():
+		grid.add_child(_make_crypt_skill_card(skill))
+
+func _make_crypt_skill_card(skill: Dictionary) -> Button:
+	var skill_id := str(skill.get("id", ""))
+	const SKILL_COST := 20
+	var in_pool := GameState.skill_pool_ids.has(skill_id)
+
+	var btn := Button.new()
+	btn.custom_minimum_size = Vector2(300, 100)
+	btn.clip_text = true
+	btn.add_theme_font_size_override("font_size", 16)
+	btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var icon := Localization.skill_icon_text(skill_id, str(skill.get("icon_text", "*")))
+	var title := Localization.skill_name(skill_id, str(skill.get("title", skill_id)))
+	var desc := Localization.skill_description(skill_id, str(skill.get("description", "")))
+
+	if in_pool:
+		btn.text = "%s  %s\n[In pool]" % [icon, title]
+		btn.disabled = true
+		btn.modulate = Color(0.6, 0.9, 0.6, 1.0)
+	elif GameState.skulls >= SKILL_COST:
+		btn.text = "%s  %s\n%s skulls" % [icon, title, SKILL_COST]
+		btn.tooltip_text = desc
+		btn.pressed.connect(_unlock_skill.bind(skill_id, SKILL_COST, btn))
+	else:
+		btn.text = "%s  %s\n%s skulls (need more)" % [icon, title, SKILL_COST]
+		btn.disabled = true
+		btn.modulate = Color(0.55, 0.55, 0.55, 1.0)
+	return btn
+
+func _unlock_skill(skill_id: String, cost: int, btn: Button) -> void:
+	if GameState.skulls < cost:
+		return
+	if GameState.skill_pool_ids.has(skill_id):
+		return
+	GameState.skulls -= cost
+	GameState.skill_pool_ids.append(skill_id)
+	GameState.unlocked_skill_ids.append(skill_id)
+	SaveSystem.save()
+	_crypt_skulls_label.text = "Skulls: %d" % GameState.skulls
+	btn.text = btn.text.split("\n")[0] + "\n[In pool]"
+	btn.modulate = Color(0.6, 0.9, 0.6, 1.0)
+	btn.disabled = true
+	btn.set_pressed_no_signal(false)
 
 func _refresh_items_panel_text() -> void:
 	if _items_panel == null:
