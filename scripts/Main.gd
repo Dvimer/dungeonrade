@@ -59,6 +59,13 @@ var _summary_stats_label: Label = null
 var _summary_earned_label: Label = null
 var _summary_continue_button: Button = null
 var _last_run_result: Dictionary = {}
+var _crypt_panel: PanelContainer = null
+var _crypt_skulls_label: Label = null
+var _crypt_tokens_label: Label = null
+var _crypt_tab_buttons: Dictionary = {}
+var _crypt_content_box: VBoxContainer = null
+var _crypt_play_button: Button = null
+var _crypt_active_tab: String = "equipment"
 var _ui_texture_cache: Dictionary = {}
 
 func _ready() -> void:
@@ -612,6 +619,184 @@ func _build_summary_panel() -> void:
 	_summary_continue_button.text = "Continue"
 	_summary_continue_button.pressed.connect(_on_summary_continue_pressed)
 	vbox.add_child(_summary_continue_button)
+	_build_crypt_panel()
+
+func _build_crypt_panel() -> void:
+	_crypt_panel = PanelContainer.new()
+	_crypt_panel.visible = false
+	_crypt_panel.custom_minimum_size = Vector2(1020, 0)
+	_crypt_panel.set_anchors_preset(Control.PRESET_CENTER)
+	_crypt_panel.anchor_left = 0.5
+	_crypt_panel.anchor_top = 0.5
+	_crypt_panel.anchor_right = 0.5
+	_crypt_panel.anchor_bottom = 0.5
+	_crypt_panel.offset_left = -510.0
+	_crypt_panel.offset_top = -380.0
+	_crypt_panel.offset_right = 510.0
+	_crypt_panel.offset_bottom = 380.0
+	_menu_root.add_child(_crypt_panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_top", 20)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_bottom", 20)
+	_crypt_panel.add_child(margin)
+
+	var root_vbox := VBoxContainer.new()
+	root_vbox.add_theme_constant_override("separation", 14)
+	margin.add_child(root_vbox)
+
+	# Header
+	var header := HBoxContainer.new()
+	header.alignment = BoxContainer.ALIGNMENT_CENTER
+	header.add_theme_constant_override("separation", 40)
+	root_vbox.add_child(header)
+
+	var crypt_title := Label.new()
+	crypt_title.text = "The Crypt"
+	crypt_title.add_theme_font_size_override("font_size", 30)
+	crypt_title.add_theme_color_override("font_color", Color(0.952941, 0.823529, 0.478431, 1.0))
+	header.add_child(crypt_title)
+
+	_crypt_skulls_label = Label.new()
+	_crypt_skulls_label.add_theme_font_size_override("font_size", 22)
+	_crypt_skulls_label.add_theme_color_override("font_color", Color(1.0, 0.82, 0.34, 1.0))
+	header.add_child(_crypt_skulls_label)
+
+	_crypt_tokens_label = Label.new()
+	_crypt_tokens_label.add_theme_font_size_override("font_size", 22)
+	_crypt_tokens_label.add_theme_color_override("font_color", Color(0.95, 0.62, 0.25, 1.0))
+	header.add_child(_crypt_tokens_label)
+
+	# Tabs
+	var tab_row := HBoxContainer.new()
+	tab_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	tab_row.add_theme_constant_override("separation", 12)
+	root_vbox.add_child(tab_row)
+
+	for tab_id in ["equipment", "classes", "skills"]:
+		var tab_btn := Button.new()
+		tab_btn.custom_minimum_size = Vector2(200, 48)
+		tab_btn.toggle_mode = true
+		tab_btn.add_theme_font_size_override("font_size", 18)
+		match tab_id:
+			"equipment": tab_btn.text = "Equipment"
+			"classes":   tab_btn.text = "Classes"
+			"skills":    tab_btn.text = "Skills"
+		tab_btn.pressed.connect(_crypt_switch_tab.bind(tab_id))
+		tab_row.add_child(tab_btn)
+		_crypt_tab_buttons[tab_id] = tab_btn
+
+	# Content area (rebuilt each tab switch)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 480)
+	root_vbox.add_child(scroll)
+
+	_crypt_content_box = VBoxContainer.new()
+	_crypt_content_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_crypt_content_box.add_theme_constant_override("separation", 10)
+	scroll.add_child(_crypt_content_box)
+
+	# Play button
+	_crypt_play_button = Button.new()
+	_crypt_play_button.custom_minimum_size = Vector2(0, 60)
+	_crypt_play_button.add_theme_font_size_override("font_size", 22)
+	_crypt_play_button.text = "Play"
+	_crypt_play_button.pressed.connect(_on_crypt_play_pressed)
+	root_vbox.add_child(_crypt_play_button)
+
+func _open_crypt_panel() -> void:
+	if _crypt_panel == null:
+		_show_menu()
+		return
+	_crypt_active_tab = "equipment"
+	_crypt_panel.visible = true
+	_menu_root.visible = true
+	_crypt_skulls_label.text = "Skulls: %d" % GameState.skulls
+	_crypt_tokens_label.text = "Tokens: %d" % GameState.boss_tokens
+	_crypt_switch_tab("equipment")
+
+func _crypt_switch_tab(tab_id: String) -> void:
+	_crypt_active_tab = tab_id
+	for raw_id in _crypt_tab_buttons.keys():
+		var btn: Button = _crypt_tab_buttons[str(raw_id)]
+		btn.button_pressed = str(raw_id) == tab_id
+	_clear_container(_crypt_content_box)
+	match tab_id:
+		"equipment": _build_crypt_equipment_tab()
+		"classes":   _build_crypt_classes_tab()
+		"skills":    _build_crypt_skills_tab()
+
+func _on_crypt_play_pressed() -> void:
+	_crypt_panel.visible = false
+	_show_menu()
+
+func _build_crypt_equipment_tab() -> void:
+	var skull_header := Label.new()
+	skull_header.text = "Unlock items to make them available in the in-run shop."
+	skull_header.add_theme_color_override("font_color", Color(0.78, 0.78, 0.78, 1.0))
+	skull_header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_crypt_content_box.add_child(skull_header)
+
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	_crypt_content_box.add_child(grid)
+
+	var all_items := EquipmentCatalogScript.get_all_items("rarity")
+	for item in all_items:
+		grid.add_child(_make_crypt_item_card(item))
+
+func _make_crypt_item_card(item: Dictionary) -> Button:
+	var item_id := str(item.get("id", ""))
+	var rarity := str(item.get("rarity", "common"))
+	var is_available := bool(item.get("shop_enabled", false)) or GameState.unlocked_item_ids.has(item_id)
+	var cost := EquipmentCatalogScript.skull_cost_for_rarity(rarity)
+
+	var btn := Button.new()
+	btn.custom_minimum_size = Vector2(226, 110)
+	btn.clip_text = true
+	btn.add_theme_font_size_override("font_size", 15)
+	btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var title := Localization.item_name(item_id, str(item.get("title", "Item")))
+	var icon := Localization.item_icon_text(item_id, str(item.get("icon_text", "*")))
+	var rarity_cap := rarity.capitalize()
+
+	if is_available:
+		btn.text = "%s\n%s\n%s  [unlocked]" % [icon, title, rarity_cap]
+		btn.modulate = EquipmentCatalogScript.rarity_color(rarity)
+		btn.disabled = true
+	else:
+		btn.text = "%s\n%s\n%s  — %d skulls" % [icon, title, rarity_cap, cost]
+		btn.modulate = EquipmentCatalogScript.rarity_color(rarity) * Color(0.6, 0.6, 0.6, 1.0)
+		if GameState.skulls >= cost:
+			btn.pressed.connect(_unlock_item.bind(item_id, cost, btn))
+		else:
+			btn.disabled = true
+	return btn
+
+func _unlock_item(item_id: String, cost: int, btn: Button) -> void:
+	if GameState.skulls < cost:
+		return
+	if GameState.unlocked_item_ids.has(item_id):
+		return
+	GameState.skulls -= cost
+	GameState.unlocked_item_ids.append(item_id)
+	SaveSystem.save()
+	_crypt_skulls_label.text = "Skulls: %d" % GameState.skulls
+	btn.text = btn.text.replace("— %d skulls" % cost, "[unlocked]")
+	btn.modulate = EquipmentCatalogScript.rarity_color(str(EquipmentCatalogScript.get_item(item_id).get("rarity", "common")))
+	btn.disabled = true
+	btn.set_pressed_no_signal(false)
+
+func _build_crypt_classes_tab() -> void:
+	pass
+
+func _build_crypt_skills_tab() -> void:
+	pass
 
 func _refresh_items_panel_text() -> void:
 	if _items_panel == null:
