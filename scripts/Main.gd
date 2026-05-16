@@ -44,6 +44,9 @@ var _editing_level_id: String = ""
 var _selected_skill_ids: Array = []
 var _pending_replacement_skill_id: String = ""
 var _items_button: Button = null
+var _crypt_button: Button = null
+var _skills_backdrop: ColorRect = null
+var _items_backdrop: ColorRect = null
 var _items_panel: PanelContainer = null
 var _items_title: Label = null
 var _items_summary: Label = null
@@ -60,11 +63,13 @@ var _summary_stats_label: Label = null
 var _summary_earned_label: Label = null
 var _summary_continue_button: Button = null
 var _last_run_result: Dictionary = {}
+var _crypt_backdrop: ColorRect = null
 var _crypt_panel: PanelContainer = null
 var _crypt_skulls_label: Label = null
 var _crypt_tokens_label: Label = null
 var _crypt_tab_buttons: Dictionary = {}
 var _crypt_content_box: VBoxContainer = null
+var _crypt_scroll: ScrollContainer = null
 var _crypt_play_button: Button = null
 var _crypt_active_tab: String = "equipment"
 var _class_select_panel: PanelContainer = null
@@ -77,6 +82,8 @@ func _ready() -> void:
 	EventBus.main_menu_requested.connect(_on_main_menu_requested)
 	Localization.language_changed.connect(func(_language): _refresh_menu_state())
 	_ensure_items_codex_ui()
+	_menu_root.resized.connect(_layout_items_panel)
+	_menu_root.resized.connect(_layout_crypt_panel)
 	_wire_buttons()
 	await get_tree().process_frame
 	LevelCatalogScript.ensure_initialized()
@@ -90,13 +97,15 @@ func _wire_buttons() -> void:
 	_skills_button.pressed.connect(_open_skills_panel)
 	if _items_button != null:
 		_items_button.pressed.connect(_open_items_panel)
+	if _crypt_button != null:
+		_crypt_button.pressed.connect(_open_crypt_panel)
 	_choose_level_button.pressed.connect(func(): _open_level_picker("play"))
 	_create_level_button.pressed.connect(_on_create_level_pressed)
 	_edit_level_button.pressed.connect(func(): _open_level_picker("edit"))
 	_lang_ru_button.pressed.connect(func(): Localization.set_language("ru"))
 	_lang_en_button.pressed.connect(func(): Localization.set_language("en"))
 	$MenuLayer/Root/LevelListPanel/Margin/VBox/CloseButton.pressed.connect(func(): _level_list_panel.visible = false)
-	$MenuLayer/Root/SkillsPanel/Margin/VBox/ButtonRow/CancelButton.pressed.connect(func(): _skills_panel.visible = false)
+	$MenuLayer/Root/SkillsPanel/Margin/VBox/ButtonRow/CancelButton.pressed.connect(_close_skills_panel)
 	$MenuLayer/Root/SkillsPanel/Margin/VBox/ButtonRow/SaveButton.pressed.connect(_save_skill_pool)
 	$MenuLayer/Root/EditorPanel/Margin/VBox/ButtonRow/CancelButton.pressed.connect(func(): _editor_panel.visible = false)
 	$MenuLayer/Root/EditorPanel/Margin/VBox/ButtonRow/SaveButton.pressed.connect(_save_level_from_editor)
@@ -122,6 +131,8 @@ func _refresh_menu_state() -> void:
 		_skills_button.text = Localization.t("menu.skills", [_selected_skill_ids.size()])
 	if _items_button:
 		_items_button.text = Localization.t("menu.items")
+	if _crypt_button:
+		_crypt_button.text = Localization.t("menu.crypt", [GameState.skulls, GameState.boss_tokens])
 	_continue_button.text = Localization.t("menu.continue")
 	$MenuLayer/Root/MenuCard/Margin/VBox/NewGameButton.text = Localization.t("menu.new_game")
 	_choose_level_button.text = Localization.t("menu.pick_level")
@@ -143,19 +154,25 @@ func _refresh_menu_state() -> void:
 func _show_menu() -> void:
 	_menu_root.visible = true
 	_level_list_panel.visible = false
+	if _skills_backdrop != null: _skills_backdrop.visible = false
 	_skills_panel.visible = false
 	_editor_panel.visible = false
-	if _items_panel != null:
-		_items_panel.visible = false
+	if _items_backdrop != null: _items_backdrop.visible = false
+	if _items_panel != null: _items_panel.visible = false
+	if _crypt_backdrop != null: _crypt_backdrop.visible = false
+	if _crypt_panel != null: _crypt_panel.visible = false
 	_refresh_menu_state()
 
 func _hide_menu() -> void:
 	_menu_root.visible = false
 	_level_list_panel.visible = false
+	if _skills_backdrop != null: _skills_backdrop.visible = false
 	_skills_panel.visible = false
 	_editor_panel.visible = false
-	if _items_panel != null:
-		_items_panel.visible = false
+	if _items_backdrop != null: _items_backdrop.visible = false
+	if _items_panel != null: _items_panel.visible = false
+	if _crypt_backdrop != null: _crypt_backdrop.visible = false
+	if _crypt_panel != null: _crypt_panel.visible = false
 
 func _on_continue_pressed() -> void:
 	var level_id := LevelCatalogScript.get_continue_level_id()
@@ -365,6 +382,8 @@ func _ensure_skill_pool_initialized() -> void:
 
 func _open_skills_panel() -> void:
 	_ensure_skill_pool_initialized()
+	if _skills_backdrop != null:
+		_skills_backdrop.visible = true
 	_skills_panel.visible = true
 	_level_list_panel.visible = false
 	_editor_panel.visible = false
@@ -374,6 +393,11 @@ func _open_skills_panel() -> void:
 	_skills_error.text = ""
 	_refresh_skills_panel()
 	_refresh_skills_summary()
+
+func _close_skills_panel() -> void:
+	if _skills_backdrop != null:
+		_skills_backdrop.visible = false
+	_skills_panel.visible = false
 
 func _refresh_skills_summary() -> void:
 	if _skills_summary == null:
@@ -473,7 +497,7 @@ func _save_skill_pool() -> void:
 		return
 	GameState.skill_pool_ids = _selected_skill_ids.duplicate()
 	SaveSystem.save()
-	_skills_panel.visible = false
+	_close_skills_panel()
 	_refresh_menu_state()
 
 func _ensure_items_codex_ui() -> void:
@@ -483,39 +507,64 @@ func _ensure_items_codex_ui() -> void:
 	menu_box.add_child(_items_button)
 	menu_box.move_child(_items_button, _skills_button.get_index() + 1)
 
+	_crypt_button = Button.new()
+	_crypt_button.custom_minimum_size = Vector2(0, 56)
+	menu_box.add_child(_crypt_button)
+	menu_box.move_child(_crypt_button, _items_button.get_index() + 1)
+
+	_skills_backdrop = ColorRect.new()
+	_skills_backdrop.visible = false
+	_skills_backdrop.color = Color(0.03, 0.04, 0.06, 0.88)
+	_skills_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_skills_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	_menu_root.add_child(_skills_backdrop)
+	_menu_root.move_child(_skills_backdrop, _skills_panel.get_index())
+
+	_items_backdrop = ColorRect.new()
+	_items_backdrop.visible = false
+	_items_backdrop.color = Color(0.03, 0.04, 0.06, 0.86)
+	_items_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_items_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	_menu_root.add_child(_items_backdrop)
+
 	_items_panel = PanelContainer.new()
 	_items_panel.visible = false
-	_items_panel.custom_minimum_size = Vector2(980, 0)
-	_items_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_items_panel.anchor_left = 0.5
-	_items_panel.anchor_top = 0.5
-	_items_panel.anchor_right = 0.5
-	_items_panel.anchor_bottom = 0.5
-	_items_panel.offset_left = -490.0
-	_items_panel.offset_top = -360.0
-	_items_panel.offset_right = 490.0
-	_items_panel.offset_bottom = 360.0
+	_items_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_items_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_menu_root.add_child(_items_panel)
+	var items_panel_style := StyleBoxFlat.new()
+	items_panel_style.bg_color = Color(0.10, 0.10, 0.12, 0.985)
+	items_panel_style.border_color = Color(0.24, 0.25, 0.30, 1.0)
+	items_panel_style.border_width_left = 2
+	items_panel_style.border_width_top = 2
+	items_panel_style.border_width_right = 2
+	items_panel_style.border_width_bottom = 2
+	items_panel_style.corner_radius_top_left = 18
+	items_panel_style.corner_radius_top_right = 18
+	items_panel_style.corner_radius_bottom_left = 18
+	items_panel_style.corner_radius_bottom_right = 18
+	_items_panel.add_theme_stylebox_override("panel", items_panel_style)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 20)
-	margin.add_theme_constant_override("margin_top", 20)
-	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_bottom", 20)
+	margin.add_theme_constant_override("margin_left", 18)
+	margin.add_theme_constant_override("margin_top", 18)
+	margin.add_theme_constant_override("margin_right", 18)
+	margin.add_theme_constant_override("margin_bottom", 18)
 	_items_panel.add_child(margin)
 
 	var root_box := VBoxContainer.new()
+	root_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root_box.add_theme_constant_override("separation", 12)
 	margin.add_child(root_box)
 
 	_items_title = Label.new()
 	_items_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_items_title.add_theme_font_size_override("font_size", 28)
+	_items_title.add_theme_font_size_override("font_size", 26)
 	_items_title.add_theme_color_override("font_color", Color(0.952941, 0.823529, 0.478431, 1.0))
 	root_box.add_child(_items_title)
 
 	_items_summary = Label.new()
-	_items_summary.custom_minimum_size = Vector2(0, 44)
+	_items_summary.custom_minimum_size = Vector2(0, 30)
 	_items_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_items_summary.add_theme_color_override("font_color", Color(0.88, 0.88, 0.88, 1.0))
 	root_box.add_child(_items_summary)
@@ -527,14 +576,14 @@ func _ensure_items_codex_ui() -> void:
 
 	for sort_key in ["rarity", "name", "slot", "type"]:
 		var sort_button := Button.new()
-		sort_button.custom_minimum_size = Vector2(140, 42)
+		sort_button.custom_minimum_size = Vector2(132, 40)
 		sort_button.toggle_mode = true
 		sort_button.pressed.connect(_set_item_sort.bind(sort_key))
 		sort_row.add_child(sort_button)
 		_items_sort_buttons[sort_key] = sort_button
 
 	var hover_card := PanelContainer.new()
-	hover_card.custom_minimum_size = Vector2(0, 120)
+	hover_card.custom_minimum_size = Vector2(0, 100)
 	root_box.add_child(hover_card)
 
 	var hover_margin := MarginContainer.new()
@@ -549,7 +598,7 @@ func _ensure_items_codex_ui() -> void:
 	hover_margin.add_child(hover_box)
 
 	_items_hover_title = Label.new()
-	_items_hover_title.add_theme_font_size_override("font_size", 24)
+	_items_hover_title.add_theme_font_size_override("font_size", 22)
 	_items_hover_title.add_theme_color_override("font_color", Color(0.952941, 0.823529, 0.478431, 1.0))
 	hover_box.add_child(_items_hover_title)
 
@@ -563,7 +612,8 @@ func _ensure_items_codex_ui() -> void:
 	hover_box.add_child(_items_hover_description)
 
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 420)
+	scroll.custom_minimum_size = Vector2(0, 380)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root_box.add_child(scroll)
 
 	_items_grid = GridContainer.new()
@@ -575,14 +625,16 @@ func _ensure_items_codex_ui() -> void:
 
 	var button_row := HBoxContainer.new()
 	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	button_row.custom_minimum_size = Vector2(0, 56)
 	root_box.add_child(button_row)
 
 	_items_close_button = Button.new()
 	_items_close_button.custom_minimum_size = Vector2(180, 52)
 	_items_close_button.text = Localization.t("menu.close")
-	_items_close_button.pressed.connect(func(): _items_panel.visible = false)
+	_items_close_button.pressed.connect(_close_items_panel)
 	button_row.add_child(_items_close_button)
 
+	_layout_items_panel()
 	_refresh_items_panel_text()
 	_build_summary_panel()
 
@@ -641,50 +693,62 @@ func _build_summary_panel() -> void:
 	_build_crypt_panel()
 
 func _build_crypt_panel() -> void:
+	_crypt_backdrop = ColorRect.new()
+	_crypt_backdrop.visible = false
+	_crypt_backdrop.color = Color(0.03, 0.04, 0.06, 0.86)
+	_crypt_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_crypt_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	_menu_root.add_child(_crypt_backdrop)
+
 	_crypt_panel = PanelContainer.new()
 	_crypt_panel.visible = false
-	_crypt_panel.custom_minimum_size = Vector2(1020, 0)
-	_crypt_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_crypt_panel.anchor_left = 0.5
-	_crypt_panel.anchor_top = 0.5
-	_crypt_panel.anchor_right = 0.5
-	_crypt_panel.anchor_bottom = 0.5
-	_crypt_panel.offset_left = -510.0
-	_crypt_panel.offset_top = -380.0
-	_crypt_panel.offset_right = 510.0
-	_crypt_panel.offset_bottom = 380.0
+	_crypt_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_crypt_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_menu_root.add_child(_crypt_panel)
+	var crypt_style := StyleBoxFlat.new()
+	crypt_style.bg_color = Color(0.10, 0.10, 0.12, 0.985)
+	crypt_style.border_color = Color(0.24, 0.25, 0.30, 1.0)
+	crypt_style.border_width_left = 2
+	crypt_style.border_width_top = 2
+	crypt_style.border_width_right = 2
+	crypt_style.border_width_bottom = 2
+	crypt_style.corner_radius_top_left = 18
+	crypt_style.corner_radius_top_right = 18
+	crypt_style.corner_radius_bottom_left = 18
+	crypt_style.corner_radius_bottom_right = 18
+	_crypt_panel.add_theme_stylebox_override("panel", crypt_style)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_top", 20)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_bottom", 20)
+	margin.add_theme_constant_override("margin_left", 18)
+	margin.add_theme_constant_override("margin_top", 18)
+	margin.add_theme_constant_override("margin_right", 18)
+	margin.add_theme_constant_override("margin_bottom", 18)
 	_crypt_panel.add_child(margin)
 
 	var root_vbox := VBoxContainer.new()
+	root_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root_vbox.add_theme_constant_override("separation", 14)
 	margin.add_child(root_vbox)
 
 	# Header
 	var header := HBoxContainer.new()
 	header.alignment = BoxContainer.ALIGNMENT_CENTER
-	header.add_theme_constant_override("separation", 40)
+	header.add_theme_constant_override("separation", 26)
 	root_vbox.add_child(header)
 
 	var crypt_title := Label.new()
 	crypt_title.text = "The Crypt"
-	crypt_title.add_theme_font_size_override("font_size", 30)
+	crypt_title.add_theme_font_size_override("font_size", 27)
 	crypt_title.add_theme_color_override("font_color", Color(0.952941, 0.823529, 0.478431, 1.0))
 	header.add_child(crypt_title)
 
 	_crypt_skulls_label = Label.new()
-	_crypt_skulls_label.add_theme_font_size_override("font_size", 22)
+	_crypt_skulls_label.add_theme_font_size_override("font_size", 18)
 	_crypt_skulls_label.add_theme_color_override("font_color", Color(1.0, 0.82, 0.34, 1.0))
 	header.add_child(_crypt_skulls_label)
 
 	_crypt_tokens_label = Label.new()
-	_crypt_tokens_label.add_theme_font_size_override("font_size", 22)
+	_crypt_tokens_label.add_theme_font_size_override("font_size", 18)
 	_crypt_tokens_label.add_theme_color_override("font_color", Color(0.95, 0.62, 0.25, 1.0))
 	header.add_child(_crypt_tokens_label)
 
@@ -696,9 +760,9 @@ func _build_crypt_panel() -> void:
 
 	for tab_id in ["equipment", "classes", "skills"]:
 		var tab_btn := Button.new()
-		tab_btn.custom_minimum_size = Vector2(200, 48)
+		tab_btn.custom_minimum_size = Vector2(180, 44)
 		tab_btn.toggle_mode = true
-		tab_btn.add_theme_font_size_override("font_size", 18)
+		tab_btn.add_theme_font_size_override("font_size", 17)
 		match tab_id:
 			"equipment": tab_btn.text = "Equipment"
 			"classes":   tab_btn.text = "Classes"
@@ -709,7 +773,9 @@ func _build_crypt_panel() -> void:
 
 	# Content area (rebuilt each tab switch)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 480)
+	_crypt_scroll = scroll
+	scroll.custom_minimum_size = Vector2(0, 420)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root_vbox.add_child(scroll)
 
 	_crypt_content_box = VBoxContainer.new()
@@ -722,8 +788,24 @@ func _build_crypt_panel() -> void:
 	_crypt_play_button.custom_minimum_size = Vector2(0, 60)
 	_crypt_play_button.add_theme_font_size_override("font_size", 22)
 	_crypt_play_button.text = "Play"
+	var play_style := StyleBoxFlat.new()
+	play_style.bg_color = Color(0.16, 0.12, 0.08, 1.0)
+	play_style.border_color = Color(0.73, 0.55, 0.30, 1.0)
+	play_style.border_width_left = 2
+	play_style.border_width_top = 2
+	play_style.border_width_right = 2
+	play_style.border_width_bottom = 2
+	play_style.corner_radius_top_left = 12
+	play_style.corner_radius_top_right = 12
+	play_style.corner_radius_bottom_left = 12
+	play_style.corner_radius_bottom_right = 12
+	_crypt_play_button.add_theme_stylebox_override("normal", play_style)
+	_crypt_play_button.add_theme_stylebox_override("hover", play_style)
+	_crypt_play_button.add_theme_stylebox_override("pressed", play_style)
+	_crypt_play_button.add_theme_color_override("font_color", Color(0.98, 0.90, 0.76, 1.0))
 	_crypt_play_button.pressed.connect(_on_crypt_play_pressed)
 	root_vbox.add_child(_crypt_play_button)
+	_layout_crypt_panel()
 	_build_class_select_panel()
 
 func _build_class_select_panel() -> void:
@@ -825,6 +907,9 @@ func _open_crypt_panel() -> void:
 		_show_menu()
 		return
 	_crypt_active_tab = "equipment"
+	_layout_crypt_panel()
+	if _crypt_backdrop != null:
+		_crypt_backdrop.visible = true
 	_crypt_panel.visible = true
 	_menu_root.visible = true
 	_crypt_skulls_label.text = "Skulls: %d" % GameState.skulls
@@ -843,56 +928,124 @@ func _crypt_switch_tab(tab_id: String) -> void:
 		"skills":    _build_crypt_skills_tab()
 
 func _on_crypt_play_pressed() -> void:
+	if _crypt_backdrop != null:
+		_crypt_backdrop.visible = false
 	_crypt_panel.visible = false
 	_show_menu()
 
 func _build_crypt_equipment_tab() -> void:
 	var skull_header := Label.new()
-	skull_header.text = "Unlock items to make them available in the in-run shop."
-	skull_header.add_theme_color_override("font_color", Color(0.78, 0.78, 0.78, 1.0))
+	skull_header.text = "Unlock items to add them to the in-run shop. Base items are always available."
+	skull_header.add_theme_color_override("font_color", Color(0.70, 0.70, 0.70, 1.0))
 	skull_header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	skull_header.add_theme_font_size_override("font_size", 13)
 	_crypt_content_box.add_child(skull_header)
 
 	var grid := GridContainer.new()
-	grid.columns = 4
+	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 10)
 	_crypt_content_box.add_child(grid)
 
+	# Sort: available/unlocked first, then ascending rarity (common → mythic)
 	var all_items := EquipmentCatalogScript.get_all_items("rarity")
+	all_items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var a_av := bool(a.get("shop_enabled", false)) or GameState.unlocked_item_ids.has(str(a.get("id", "")))
+		var b_av := bool(b.get("shop_enabled", false)) or GameState.unlocked_item_ids.has(str(b.get("id", "")))
+		if a_av != b_av:
+			return a_av
+		return EquipmentCatalogScript.rarity_rank(str(a.get("rarity", "common"))) < EquipmentCatalogScript.rarity_rank(str(b.get("rarity", "common")))
+	)
 	for item in all_items:
 		grid.add_child(_make_crypt_item_card(item))
 
-func _make_crypt_item_card(item: Dictionary) -> Button:
+func _make_crypt_item_card(item: Dictionary) -> PanelContainer:
 	var item_id := str(item.get("id", ""))
 	var rarity := str(item.get("rarity", "common"))
 	var is_available := bool(item.get("shop_enabled", false)) or GameState.unlocked_item_ids.has(item_id)
 	var cost := EquipmentCatalogScript.skull_cost_for_rarity(rarity)
-
-	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(226, 110)
-	btn.clip_text = true
-	btn.add_theme_font_size_override("font_size", 15)
-	btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
-
 	var title := Localization.item_name(item_id, str(item.get("title", "Item")))
-	var icon := Localization.item_icon_text(item_id, str(item.get("icon_text", "*")))
-	var rarity_cap := rarity.capitalize()
+	var rarity_color := EquipmentCatalogScript.rarity_color(rarity)
+
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.09, 0.07, 0.10, 0.97) if not is_available else Color(0.07, 0.11, 0.09, 0.97)
+	style.border_color = rarity_color if is_available else rarity_color * Color(0.55, 0.55, 0.55, 1.0)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 10
+	style.corner_radius_top_right = 10
+	style.corner_radius_bottom_left = 10
+	style.corner_radius_bottom_right = 10
+	panel.add_theme_stylebox_override("panel", style)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	panel.add_child(margin)
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 10)
+	margin.add_child(hbox)
+
+	# Icon column
+	var icon_path := str(item.get("icon_path", ""))
+	var icon_tex := _load_ui_texture(icon_path)
+	if icon_tex != null:
+		var icon := TextureRect.new()
+		icon.custom_minimum_size = Vector2(36, 36)
+		icon.texture = icon_tex
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.modulate = rarity_color if is_available else Color(0.55, 0.55, 0.55, 1.0)
+		hbox.add_child(icon)
+
+	# Text column
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 3)
+	hbox.add_child(vbox)
+
+	var title_label := Label.new()
+	title_label.text = title
+	title_label.add_theme_font_size_override("font_size", 15)
+	title_label.add_theme_color_override("font_color",
+		Color(0.96, 0.93, 0.98, 1.0) if is_available else Color(0.65, 0.63, 0.68, 1.0))
+	vbox.add_child(title_label)
+
+	var rarity_label := Label.new()
+	rarity_label.text = rarity.capitalize()
+	rarity_label.add_theme_font_size_override("font_size", 12)
+	rarity_label.add_theme_color_override("font_color",
+		rarity_color if is_available else rarity_color * Color(0.6, 0.6, 0.6, 1.0))
+	vbox.add_child(rarity_label)
 
 	if is_available:
-		btn.text = "%s\n%s\n%s  [unlocked]" % [icon, title, rarity_cap]
-		btn.modulate = EquipmentCatalogScript.rarity_color(rarity)
-		btn.disabled = true
+		var status := Label.new()
+		status.text = "In shop"
+		status.add_theme_font_size_override("font_size", 12)
+		status.add_theme_color_override("font_color", Color(0.48, 0.88, 0.58, 1.0))
+		vbox.add_child(status)
 	else:
-		btn.text = "%s\n%s\n%s  — %d skulls" % [icon, title, rarity_cap, cost]
-		btn.modulate = EquipmentCatalogScript.rarity_color(rarity) * Color(0.6, 0.6, 0.6, 1.0)
+		var action_btn := Button.new()
+		action_btn.custom_minimum_size = Vector2(0, 28)
+		action_btn.add_theme_font_size_override("font_size", 12)
 		if GameState.skulls >= cost:
-			btn.pressed.connect(_unlock_item.bind(item_id, cost, btn))
+			action_btn.text = "Unlock  %d 💀" % cost
+			action_btn.pressed.connect(_unlock_item.bind(item_id, cost))
 		else:
-			btn.disabled = true
-	return btn
+			action_btn.disabled = true
+			action_btn.text = "%d 💀 needed" % cost
+			action_btn.modulate = Color(0.6, 0.6, 0.6, 1.0)
+		vbox.add_child(action_btn)
+	return panel
 
-func _unlock_item(item_id: String, cost: int, btn: Button) -> void:
+func _unlock_item(item_id: String, cost: int) -> void:
 	if GameState.skulls < cost:
 		return
 	if GameState.unlocked_item_ids.has(item_id):
@@ -901,87 +1054,143 @@ func _unlock_item(item_id: String, cost: int, btn: Button) -> void:
 	GameState.unlocked_item_ids.append(item_id)
 	SaveSystem.save()
 	_crypt_skulls_label.text = "Skulls: %d" % GameState.skulls
-	btn.text = btn.text.replace("— %d skulls" % cost, "[unlocked]")
-	btn.modulate = EquipmentCatalogScript.rarity_color(str(EquipmentCatalogScript.get_item(item_id).get("rarity", "common")))
-	btn.disabled = true
-	btn.set_pressed_no_signal(false)
+	_crypt_switch_tab("equipment")
+
+func _layout_crypt_panel() -> void:
+	if _crypt_panel == null or _menu_root == null:
+		return
+	var viewport_size := _menu_root.size
+	var horizontal_margin := 18.0
+	var vertical_margin := 18.0
+	if viewport_size.x >= 1100.0:
+		horizontal_margin = 44.0
+	elif viewport_size.x >= 860.0:
+		horizontal_margin = 28.0
+	if viewport_size.y >= 980.0:
+		vertical_margin = 26.0
+	elif viewport_size.y <= 760.0:
+		vertical_margin = 12.0
+	_crypt_panel.offset_left = horizontal_margin
+	_crypt_panel.offset_top = vertical_margin
+	_crypt_panel.offset_right = -horizontal_margin
+	_crypt_panel.offset_bottom = -vertical_margin
+	if _crypt_scroll != null:
+		if viewport_size.y >= 980.0:
+			_crypt_scroll.custom_minimum_size = Vector2(0, 460)
+		elif viewport_size.y >= 820.0:
+			_crypt_scroll.custom_minimum_size = Vector2(0, 380)
+		else:
+			_crypt_scroll.custom_minimum_size = Vector2(0, 320)
 
 func _build_crypt_classes_tab() -> void:
 	var header := Label.new()
-	header.text = "Unlock classes with Boss Tokens earned by killing bosses."
-	header.add_theme_color_override("font_color", Color(0.78, 0.78, 0.78, 1.0))
+	header.text = "Earn Boss Tokens by killing bosses. Use tokens to unlock new classes."
+	header.add_theme_color_override("font_color", Color(0.70, 0.70, 0.70, 1.0))
 	header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	header.add_theme_font_size_override("font_size", 13)
 	_crypt_content_box.add_child(header)
 
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 16)
-	grid.add_theme_constant_override("v_separation", 16)
-	_crypt_content_box.add_child(grid)
+	var vlist := VBoxContainer.new()
+	vlist.add_theme_constant_override("separation", 10)
+	_crypt_content_box.add_child(vlist)
 
 	for class_def in ClassCatalogScript.get_all_classes():
-		grid.add_child(_make_crypt_class_card(class_def))
+		vlist.add_child(_make_crypt_class_card(class_def))
 
 func _make_crypt_class_card(class_def: Dictionary) -> PanelContainer:
 	var class_id := str(class_def.get("id", "warrior"))
 	var cost := int(class_def.get("token_cost", 0))
 	var is_unlocked := ClassCatalogScript.is_unlocked(class_id)
 	var is_selected := GameState.selected_class == class_id
+	var class_color := ClassCatalogScript.rarity_color_for(class_id)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(460, 130)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.10, 0.08, 0.14, 0.97) if is_unlocked else Color(0.08, 0.07, 0.10, 0.97)
+	style.border_color = class_color if is_unlocked else class_color * Color(0.45, 0.45, 0.45, 1.0)
+	style.border_width_left = 3 if is_selected else 2
+	style.border_width_top = 3 if is_selected else 2
+	style.border_width_right = 3 if is_selected else 2
+	style.border_width_bottom = 3 if is_selected else 2
+	style.corner_radius_top_left = 12
+	style.corner_radius_top_right = 12
+	style.corner_radius_bottom_left = 12
+	style.corner_radius_bottom_right = 12
+	panel.add_theme_stylebox_override("panel", style)
 
 	var m := MarginContainer.new()
-	m.add_theme_constant_override("margin_left", 16)
-	m.add_theme_constant_override("margin_top", 14)
-	m.add_theme_constant_override("margin_right", 16)
-	m.add_theme_constant_override("margin_bottom", 14)
+	m.add_theme_constant_override("margin_left", 14)
+	m.add_theme_constant_override("margin_top", 12)
+	m.add_theme_constant_override("margin_right", 14)
+	m.add_theme_constant_override("margin_bottom", 12)
 	panel.add_child(m)
 
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
-	m.add_child(vbox)
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 14)
+	m.add_child(hbox)
 
-	var title_row := HBoxContainer.new()
-	title_row.add_theme_constant_override("separation", 12)
-	vbox.add_child(title_row)
-
+	# Left: icon
 	var icon_label := Label.new()
 	icon_label.text = str(class_def.get("icon_text", "?"))
-	icon_label.add_theme_font_size_override("font_size", 28)
-	icon_label.add_theme_color_override("font_color", ClassCatalogScript.rarity_color_for(class_id))
-	title_row.add_child(icon_label)
+	icon_label.custom_minimum_size = Vector2(48, 0)
+	icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon_label.add_theme_font_size_override("font_size", 32)
+	icon_label.add_theme_color_override("font_color", class_color if is_unlocked else class_color * Color(0.5, 0.5, 0.5, 1.0))
+	hbox.add_child(icon_label)
+
+	# Middle: name + description
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 4)
+	hbox.add_child(vbox)
+
+	var name_row := HBoxContainer.new()
+	name_row.add_theme_constant_override("separation", 10)
+	vbox.add_child(name_row)
 
 	var name_label := Label.new()
 	name_label.text = str(class_def.get("title", class_id))
-	name_label.add_theme_font_size_override("font_size", 24)
-	name_label.add_theme_color_override("font_color", Color(0.952941, 0.823529, 0.478431, 1.0))
-	title_row.add_child(name_label)
+	name_label.add_theme_font_size_override("font_size", 20)
+	name_label.add_theme_color_override("font_color",
+		Color(0.952941, 0.823529, 0.478431, 1.0) if is_unlocked else Color(0.55, 0.52, 0.50, 1.0))
+	name_row.add_child(name_label)
+
+	if is_selected:
+		var selected_badge := Label.new()
+		selected_badge.text = "▶ Active"
+		selected_badge.add_theme_font_size_override("font_size", 13)
+		selected_badge.add_theme_color_override("font_color", Color(0.48, 0.88, 0.58, 1.0))
+		name_row.add_child(selected_badge)
 
 	var desc_label := Label.new()
 	desc_label.text = str(class_def.get("description", ""))
 	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc_label.add_theme_color_override("font_color", Color(0.86, 0.86, 0.86, 1.0))
+	desc_label.add_theme_font_size_override("font_size", 13)
+	desc_label.add_theme_color_override("font_color",
+		Color(0.82, 0.82, 0.82, 1.0) if is_unlocked else Color(0.50, 0.50, 0.50, 1.0))
 	vbox.add_child(desc_label)
 
+	# Right: action button
 	var action_btn := Button.new()
-	action_btn.custom_minimum_size = Vector2(0, 40)
-	action_btn.add_theme_font_size_override("font_size", 17)
+	action_btn.custom_minimum_size = Vector2(110, 40)
+	action_btn.add_theme_font_size_override("font_size", 15)
 
 	if is_unlocked and is_selected:
-		action_btn.text = "[Selected]"
+		action_btn.text = "Active"
 		action_btn.disabled = true
 	elif is_unlocked:
 		action_btn.text = "Select"
 		action_btn.pressed.connect(_select_class.bind(class_id, panel))
 	elif GameState.boss_tokens >= cost:
-		action_btn.text = "Unlock  (%d token%s)" % [cost, "s" if cost > 1 else ""]
+		action_btn.text = "Unlock\n%d token%s" % [cost, "s" if cost > 1 else ""]
 		action_btn.pressed.connect(_unlock_class.bind(class_id, cost, action_btn, panel))
 	else:
-		action_btn.text = "Locked  (%d token%s needed)" % [cost, "s" if cost > 1 else ""]
+		action_btn.text = "🔒 %d token%s" % [cost, "s" if cost > 1 else ""]
 		action_btn.disabled = true
+		action_btn.modulate = Color(0.55, 0.55, 0.55, 1.0)
 
-	vbox.add_child(action_btn)
+	hbox.add_child(action_btn)
 	return panel
 
 func _unlock_class(class_id: String, cost: int, btn: Button, panel: Node) -> void:
@@ -1094,12 +1303,21 @@ func _refresh_items_panel_text() -> void:
 func _open_items_panel() -> void:
 	if _items_panel == null:
 		return
+	_layout_items_panel()
+	if _items_backdrop != null:
+		_items_backdrop.visible = true
 	_items_panel.visible = true
 	_level_list_panel.visible = false
 	_skills_panel.visible = false
 	_editor_panel.visible = false
 	_refresh_items_panel_text()
 	_refresh_items_grid()
+
+func _close_items_panel() -> void:
+	if _items_backdrop != null:
+		_items_backdrop.visible = false
+	if _items_panel != null:
+		_items_panel.visible = false
 
 func _set_item_sort(sort_key: String) -> void:
 	_item_sort_key = sort_key
@@ -1109,6 +1327,7 @@ func _set_item_sort(sort_key: String) -> void:
 func _refresh_items_grid() -> void:
 	if _items_grid == null:
 		return
+	_layout_items_panel()
 	_clear_container(_items_grid)
 	var items := EquipmentCatalogScript.get_all_items(_item_sort_key)
 	for item in items:
@@ -1116,24 +1335,65 @@ func _refresh_items_grid() -> void:
 	if not items.is_empty():
 		_show_item_hover(items[0])
 
-func _make_item_card(item: Dictionary) -> Button:
-	var button := Button.new()
-	button.custom_minimum_size = Vector2(172, 108)
-	button.clip_text = true
-	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-	button.add_theme_font_size_override("font_size", 16)
+func _make_item_card(item: Dictionary) -> Control:
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(172, 118)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.10, 0.07, 0.09, 0.96)
+	style.border_color = EquipmentCatalogScript.rarity_color(str(item.get("rarity", "common")))
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 10
+	style.corner_radius_top_right = 10
+	style.corner_radius_bottom_left = 10
+	style.corner_radius_bottom_right = 10
+	card.add_theme_stylebox_override("panel", style)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	card.add_child(margin)
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 6)
+	margin.add_child(box)
+
 	var icon_path := str(item.get("icon_path", ""))
 	var icon_tex := _load_ui_texture(icon_path)
 	var title := Localization.item_name(str(item.get("id", "")), str(item.get("title", "Item")))
 	var rarity := Localization.item_rarity(str(item.get("rarity", "common")), str(item.get("rarity", "common")).capitalize())
-	button.text = "%s\n%s" % [title, rarity]
 	if icon_tex != null:
-		button.icon = icon_tex
-	button.modulate = EquipmentCatalogScript.rarity_color(str(item.get("rarity", "common")))
-	button.mouse_entered.connect(_show_item_hover.bind(item))
-	button.focus_entered.connect(_show_item_hover.bind(item))
-	return button
+		var icon := TextureRect.new()
+		icon.custom_minimum_size = Vector2(42, 42)
+		icon.texture = icon_tex
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		box.add_child(icon)
+
+	var title_label := Label.new()
+	title_label.text = title
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_label.add_theme_font_size_override("font_size", 15)
+	title_label.add_theme_color_override("font_color", Color(0.96, 0.93, 0.98, 1.0))
+	box.add_child(title_label)
+
+	var rarity_label := Label.new()
+	rarity_label.text = rarity
+	rarity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rarity_label.add_theme_font_size_override("font_size", 14)
+	rarity_label.add_theme_color_override("font_color", EquipmentCatalogScript.rarity_color(str(item.get("rarity", "common"))))
+	box.add_child(rarity_label)
+
+	card.mouse_entered.connect(_show_item_hover.bind(item))
+	card.focus_entered.connect(_show_item_hover.bind(item))
+	return card
 
 func _show_item_hover(item: Dictionary) -> void:
 	if _items_hover_title != null:
@@ -1157,3 +1417,31 @@ func _load_ui_texture(path: String) -> Texture2D:
 		_ui_texture_cache[path] = load(path)
 	var tex = _ui_texture_cache[path]
 	return tex if tex is Texture2D else null
+
+func _layout_items_panel() -> void:
+	if _items_panel == null or _menu_root == null:
+		return
+	var viewport_size := _menu_root.size
+	var horizontal_margin := 18.0
+	var vertical_margin := 18.0
+	if viewport_size.x >= 1100.0:
+		horizontal_margin = 42.0
+	elif viewport_size.x >= 860.0:
+		horizontal_margin = 28.0
+	if viewport_size.y >= 980.0:
+		vertical_margin = 28.0
+	elif viewport_size.y <= 760.0:
+		vertical_margin = 12.0
+	_items_panel.offset_left = horizontal_margin
+	_items_panel.offset_top = vertical_margin
+	_items_panel.offset_right = -horizontal_margin
+	_items_panel.offset_bottom = -vertical_margin
+	if _items_grid != null:
+		if viewport_size.x >= 1180.0:
+			_items_grid.columns = 5
+		elif viewport_size.x >= 930.0:
+			_items_grid.columns = 4
+		elif viewport_size.x >= 720.0:
+			_items_grid.columns = 3
+		else:
+			_items_grid.columns = 2

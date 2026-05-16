@@ -18,9 +18,11 @@ var _hover_info_panel: PanelContainer
 var _hover_info_label: Label
 var is_animating: bool = false
 var _active_chain_path: Array = []
+var _preview_kill_keys := {}
 var _chain_glint_t: float = 0.0
 var _chain_glint_line: Line2D
 var _chain_glint_glow: Line2D
+var _dying_enemy_keys := {}
 const RESOLVE_SPEED_SCALE := 1.2
 const FRAME_PAD := 26.0
 const COLOR_FRAME_DARK := Color(0.045, 0.043, 0.050, 0.96)
@@ -69,6 +71,7 @@ func _ready() -> void:
 	logic = BoardLogic.new(board_width, board_height)
 	logic.fill_random(0.14)
 	EventBus.enemy_damaged.connect(_on_enemy_damaged)
+	EventBus.enemy_killed.connect(_on_enemy_killed)
 	_spawn_tiles()
 	_setup_hover_info()
 	_setup_chain_glint()
@@ -135,11 +138,18 @@ func apply_wave_profile(wave_config: Dictionary, refill_board: bool = false) -> 
 		return
 	logic.configure_spawn(
 		float(wave_config.get("enemy_spawn_chance", logic.enemy_spawn_chance)),
-		wave_config.get("monster_weights", {})
+		wave_config.get("monster_weights", {}),
+		wave_config.get("monster_profile", {})
 	)
 	if refill_board:
 		logic.fill_random(logic.enemy_spawn_chance)
 		sync_view()
+
+func refresh_enemy_scaling(enemy_spawn_chance: float, profile: Dictionary) -> void:
+	if logic == null:
+		return
+	logic.refresh_enemy_scaling(enemy_spawn_chance, profile)
+	sync_view()
 
 func spawn_monster(monster_id: String) -> Vector2:
 	if logic == null:
@@ -232,6 +242,7 @@ func clear_highlights() -> void:
 		if n:
 			n.set_highlighted(false)
 	_last_path.clear()
+	_clear_preview_kills()
 	_update_chain_line([])
 
 # Гасит все тайлы, не совместимые с типом start_kind.
@@ -367,21 +378,22 @@ func consume_and_refill(consumed: Array, mark_spawned_enemies_fresh: bool = fals
 				var node: Tile = old_tiles[y][x]
 				if node:
 					removed_nodes.append(node)
-					node.z_index = 120
-					node.rotation = 0.0
-					tween.tween_property(node, "scale", Vector2(1.16, 1.16), 0.07 * RESOLVE_SPEED_SCALE) \
-						.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-					tween.tween_property(node, "scale", Vector2(0.18, 0.18), 0.12 * RESOLVE_SPEED_SCALE) \
-						.set_delay(0.07 * RESOLVE_SPEED_SCALE) \
-						.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-					tween.tween_property(node, "modulate:a", 0.0, 0.14 * RESOLVE_SPEED_SCALE) \
-						.set_delay(0.04 * RESOLVE_SPEED_SCALE) \
-						.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-					tween.tween_property(node, "rotation", deg_to_rad(10.0), 0.08 * RESOLVE_SPEED_SCALE) \
-						.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-					tween.tween_property(node, "rotation", deg_to_rad(-14.0), 0.11 * RESOLVE_SPEED_SCALE) \
-						.set_delay(0.08 * RESOLVE_SPEED_SCALE) \
-						.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+					if not _dying_enemy_keys.has(_key(p)):
+						node.z_index = 120
+						node.rotation = 0.0
+						tween.tween_property(node, "scale", Vector2(1.16, 1.16), 0.07 * RESOLVE_SPEED_SCALE) \
+							.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+						tween.tween_property(node, "scale", Vector2(0.18, 0.18), 0.12 * RESOLVE_SPEED_SCALE) \
+							.set_delay(0.07 * RESOLVE_SPEED_SCALE) \
+							.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+						tween.tween_property(node, "modulate:a", 0.0, 0.14 * RESOLVE_SPEED_SCALE) \
+							.set_delay(0.04 * RESOLVE_SPEED_SCALE) \
+							.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+						tween.tween_property(node, "rotation", deg_to_rad(10.0), 0.08 * RESOLVE_SPEED_SCALE) \
+							.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+						tween.tween_property(node, "rotation", deg_to_rad(-14.0), 0.11 * RESOLVE_SPEED_SCALE) \
+							.set_delay(0.08 * RESOLVE_SPEED_SCALE) \
+							.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 
 	for x in range(board_width):
 		var survivors: Array = []
@@ -437,6 +449,7 @@ func consume_and_refill(consumed: Array, mark_spawned_enemies_fresh: bool = fals
 	for node in removed_nodes:
 		if is_instance_valid(node):
 			node.queue_free()
+	_dying_enemy_keys.clear()
 
 	tiles = new_tiles
 	for y in range(board_height):
@@ -565,6 +578,7 @@ func _show_monster_info(tile: Tile, world_point: Vector2) -> void:
 		name,
 		int(tile.data.get("hp", 0)),
 		int(tile.data.get("dmg", 0)),
+		int(tile.data.get("defense", 0)),
 		int(tile.data.get("timer", 0)),
 	])
 	_hover_info_panel.visible = true
@@ -590,35 +604,50 @@ func _count_tiles_of_kind(kind: int) -> int:
 func show_chain_preview(path: Array, world_point: Vector2) -> void:
 	if _hover_info_label == null or _hover_info_panel == null:
 		return
-	if path.is_empty():
+	if path.size() < BoardLogic.MIN_CHAIN_LENGTH:
+		_clear_preview_kills()
 		_hover_info_panel.visible = false
 		return
 	var start_tile := logic.get_tile(path[0])
 	var kind: int = int(start_tile.kind)
 	var amount: int = _count_chain_kind(path, kind)
+	var attack_power: int = 1 + int(RunState.mod("sword_damage_bonus", 0))
 	var text := ""
 	match kind:
 		TileType.Kind.SWORD:
-			var sword_power: int = 1 + int(RunState.mod("sword_damage_bonus", 0))
-			text = Localization.t("preview.attack", [sword_power * amount])
+			var sword_damage := attack_power * amount
+			text = Localization.t("preview.attack", [sword_damage])
+			_apply_preview_kills(_preview_kill_positions(path, sword_damage))
+		TileType.Kind.ENEMY:
+			var sword_count: int = _count_chain_kind(path, TileType.Kind.SWORD)
+			var enemy_start_damage := attack_power * maxi(1, sword_count)
+			text = Localization.t("preview.attack", [enemy_start_damage])
+			_apply_preview_kills(_preview_kill_positions(path, enemy_start_damage))
 		TileType.Kind.HEART:
+			_clear_preview_kills()
 			text = Localization.t("preview.heal", [amount])
 		TileType.Kind.SHIELD:
+			_clear_preview_kills()
 			text = Localization.t("preview.shield", [amount])
 		TileType.Kind.COIN:
+			_clear_preview_kills()
 			text = Localization.t("preview.gold", [amount])
 		_:
+			_clear_preview_kills()
 			text = "+%d" % [amount]
 	_hover_info_label.text = text
 	_hover_info_panel.visible = true
 	_update_hover_info_position(world_point)
 
 func clear_chain_preview() -> void:
+	_clear_preview_kills()
 	_hide_hover_info()
 
 func _on_enemy_damaged(pos: Vector2, _dmg: int) -> void:
 	var node := get_tile_node(pos)
 	if node == null:
+		return
+	if _dying_enemy_keys.has(_key(pos)):
 		return
 	var original := node.position
 	var tween := create_tween()
@@ -629,6 +658,39 @@ func _on_enemy_damaged(pos: Vector2, _dmg: int) -> void:
 	tween.tween_property(node, "modulate", Color.WHITE, 0.12)
 	show_float_at_grid(pos, "-%d" % [_dmg], Color(1.0, 0.34, 0.24), Vector2(0, -42))
 
+func _on_enemy_killed(pos: Vector2) -> void:
+	var key := _key(pos)
+	_dying_enemy_keys[key] = true
+	var node := get_tile_node(pos)
+	if node == null:
+		return
+	node.z_index = 220
+	var original := node.position
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(node, "scale", Vector2(1.46, 1.46), 0.06) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(node, "scale", Vector2(0.02, 0.02), 0.28) \
+		.set_delay(0.06) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	tween.tween_property(node, "modulate", Color(1.75, 0.08, 0.32, 0.0), 0.28) \
+		.set_delay(0.0) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tween.tween_property(node, "rotation", deg_to_rad(-34.0), 0.07) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(node, "rotation", deg_to_rad(42.0), 0.18) \
+		.set_delay(0.06) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	tween.tween_property(node, "position", original + Vector2(0, -34), 0.09) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(node, "position", original + Vector2(0, 18), 0.19) \
+		.set_delay(0.07) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	show_float_at_grid(pos, Localization.t("combat.kill"), Color(1.0, 0.44, 0.60), Vector2(0, -84), 28, 0.86)
+	show_float_at_grid(pos, "✦", Color(1.0, 0.84, 0.54), Vector2(-22, -56), 24, 0.72)
+	show_float_at_grid(pos, "✦", Color(1.0, 0.84, 0.54), Vector2(22, -56), 24, 0.72)
+	show_float_at_grid(pos, "✦", Color(1.0, 0.64, 0.52), Vector2(0, -34), 22, 0.66)
+	_spawn_kill_burst(pos)
+
 func _count_chain_kind(path: Array, kind: int) -> int:
 	var count := 0
 	for p in path:
@@ -636,7 +698,77 @@ func _count_chain_kind(path: Array, kind: int) -> int:
 			count += 1
 	return count
 
-func show_float_at_grid(pos: Vector2, text: String, color: Color, offset: Vector2 = Vector2.ZERO) -> void:
+func _preview_kill_positions(path: Array, total_damage: int) -> Array:
+	var enemies := []
+	for p in path:
+		var tile = logic.get_tile(p)
+		if tile.kind == TileType.Kind.ENEMY:
+			enemies.append(p)
+	if enemies.is_empty() or total_damage <= 0:
+		return []
+	var per_enemy := int(ceil(float(total_damage) / float(enemies.size())))
+	var result := []
+	for ep in enemies:
+		var tile = logic.get_tile(ep)
+		var reduced := maxi(1, per_enemy - int(tile.get("defense", 0)))
+		if reduced >= int(tile.get("hp", 1)):
+			result.append(ep)
+	return result
+
+func _apply_preview_kills(positions: Array) -> void:
+	var next_keys := {}
+	for p in positions:
+		next_keys[_key(p)] = p
+	for raw_key in _preview_kill_keys.keys():
+		var key := str(raw_key)
+		if next_keys.has(key):
+			continue
+		var old_node := get_tile_node(_preview_kill_keys[key])
+		if old_node:
+			old_node.set_preview_kill(false)
+	for raw_key in next_keys.keys():
+		var key := str(raw_key)
+		if _preview_kill_keys.has(key):
+			continue
+		var node := get_tile_node(next_keys[key])
+		if node:
+			node.set_preview_kill(true)
+	_preview_kill_keys = next_keys
+
+func _clear_preview_kills() -> void:
+	for raw_key in _preview_kill_keys.keys():
+		var key := str(raw_key)
+		var node := get_tile_node(_preview_kill_keys[key])
+		if node:
+			node.set_preview_kill(false)
+	_preview_kill_keys.clear()
+
+func _spawn_kill_burst(pos: Vector2) -> void:
+	var burst_specs := [
+		{"text": "✦", "offset": Vector2(-36, -18), "color": Color(1.0, 0.74, 0.42), "size": 22, "scale": 0.64},
+		{"text": "✦", "offset": Vector2(36, -18), "color": Color(1.0, 0.74, 0.42), "size": 22, "scale": 0.64},
+		{"text": "•", "offset": Vector2(-28, 6), "color": Color(1.0, 0.30, 0.42), "size": 26, "scale": 0.72},
+		{"text": "•", "offset": Vector2(28, 6), "color": Color(1.0, 0.30, 0.42), "size": 26, "scale": 0.72},
+		{"text": "✦", "offset": Vector2(0, -4), "color": Color(1.0, 0.92, 0.68), "size": 20, "scale": 0.58},
+	]
+	for spec in burst_specs:
+		show_float_at_grid(
+			pos,
+			str(spec["text"]),
+			spec["color"],
+			spec["offset"],
+			int(spec["size"]),
+			float(spec["scale"])
+		)
+
+func show_float_at_grid(
+	pos: Vector2,
+	text: String,
+	color: Color,
+	offset: Vector2 = Vector2.ZERO,
+	font_size: int = 24,
+	start_scale: float = 0.72
+) -> void:
 	var label := Label.new()
 	label.text = text
 	label.size = Vector2(150, 34)
@@ -644,13 +776,13 @@ func show_float_at_grid(pos: Vector2, text: String, color: Color, offset: Vector
 	label.position = _grid_to_local(pos) + offset - label.pivot_offset
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 24)
+	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
 	label.add_theme_constant_override("shadow_offset_x", 2)
 	label.add_theme_constant_override("shadow_offset_y", 2)
 	label.z_index = 420
-	label.scale = Vector2(0.72, 0.72)
+	label.scale = Vector2.ONE * start_scale
 	add_child(label)
 
 	var tween := create_tween().set_parallel(true)
@@ -689,7 +821,7 @@ func _set_chain_glint_visible(on: bool) -> void:
 		_chain_glint_glow.visible = on
 
 func _update_chain_glint() -> void:
-	if _active_chain_path.size() < 2:
+	if _active_chain_path.size() < BoardLogic.MIN_CHAIN_LENGTH:
 		_set_chain_glint_visible(false)
 		return
 	var ahead := _point_on_chain(min(_chain_glint_t + 0.035, 1.0))

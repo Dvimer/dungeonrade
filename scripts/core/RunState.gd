@@ -6,11 +6,10 @@ extends Node
 const MAX_HP_DEFAULT := 30
 const ROUNDS_DEFAULT := 80
 const DEFAULT_MAX_SHIELD := 5
-const DEFAULT_SHOP_CHARGE_NEEDED := 45
+const DEFAULT_SHOP_CHARGE_NEEDED := 20
 
 const SkillCatalogScript := preload("res://scripts/data/SkillCatalog.gd")
 const EquipmentCatalogScript := preload("res://scripts/data/EquipmentCatalog.gd")
-const ClassCatalogScript := preload("res://scripts/data/ClassCatalog.gd")
 
 var hp: int = MAX_HP_DEFAULT
 var max_hp: int = MAX_HP_DEFAULT
@@ -107,7 +106,7 @@ func start_level_run(level_config: Dictionary) -> void:
 	else:
 		base_modifiers = {}
 	modifiers = base_modifiers.duplicate(true)
-	var class_def := ClassCatalogScript.get_class(active_class)
+	var class_def := _class_definition(active_class)
 	var class_mods: Dictionary = class_def.get("starting_modifiers", {})
 	for key in class_mods.keys():
 		add_mod(str(key), class_mods[key])
@@ -419,3 +418,16 @@ func equipped_item_titles() -> Array:
 	for item in active_equipment:
 		result.append(Localization.item_name(str(item.get("id", "")), str(item.get("title", ""))))
 	return result
+
+func _class_definition(class_id: String) -> Dictionary:
+	var class_catalog = load("res://scripts/data/ClassCatalog.gd")
+	if class_catalog != null and class_catalog.has_method("get_class_data"):
+		var data = class_catalog.call("get_class_data", class_id)
+		if data is Dictionary:
+			return data
+	return {
+		"id": "warrior",
+		"starting_modifiers": {"sword_damage_bonus": 1},
+		"class_passive": "",
+		"max_hp_bonus": 2,
+	}

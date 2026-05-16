@@ -60,7 +60,7 @@ func _start_at(world: Vector2) -> void:
 	if debug_log:
 		print("[SWIPE] start_at world=", world, " tile=", t.board_pos if t else "null",
 			" kind=", t.data.kind if t else -1)
-	if t == null or t.data.kind == TileType.Kind.EMPTY or t.data.kind == TileType.Kind.ENEMY:
+	if t == null or t.data.kind == TileType.Kind.EMPTY:
 		if debug_log: print("[SWIPE] start ABORTED (empty/null)")
 		return
 	dragging = true
@@ -132,6 +132,11 @@ func _finish() -> void:
 	board.clear_highlights()
 	board.unfocus_all()
 	if debug_log: print("[SWIPE] finish path_len=", path.size())
+
+	if path.size() < BoardLogic.MIN_CHAIN_LENGTH:
+		path.clear()
+		EventBus.chain_cancelled.emit()
+		return
 
 	if not board.logic.is_valid_chain(path):
 		if debug_log: print("[SWIPE] chain INVALID — cancelled")

@@ -10,13 +10,17 @@ var display_name: String = ""
 var icon_path: String = "res://assets/icons/skull.svg"
 var hp: int = 1
 var dmg: int = 1
+var defense: int = 0
 var timer: int = 3
 var attack_cooldown: int = 3
 var reset_timer_on_hit: bool = false
 var hit_timer_reset: int = 3
-var remove_on_attack: bool = true
+var remove_on_attack: bool = false
 var heal_on_attack: bool = false
 var heal_on_attack_ratio: float = 1.0
+var explode_on_attack: bool = false
+var explosion_radius: int = 1
+var explosion_player_damage: int = 0
 var is_boss: bool = false
 var spawn_weight: int = 1
 var xp_bonus: int = 0
@@ -30,6 +34,7 @@ func _init(data: Dictionary = {}) -> void:
 	icon_path = str(data.get("icon_path", icon_path))
 	hp = int(data.get("hp", hp))
 	dmg = int(data.get("dmg", dmg))
+	defense = int(data.get("defense", defense))
 	timer = int(data.get("timer", timer))
 	attack_cooldown = int(data.get("attack_cooldown", data.get("timer", attack_cooldown)))
 	reset_timer_on_hit = bool(data.get("reset_timer_on_hit", reset_timer_on_hit))
@@ -37,6 +42,9 @@ func _init(data: Dictionary = {}) -> void:
 	remove_on_attack = bool(data.get("remove_on_attack", remove_on_attack))
 	heal_on_attack = bool(data.get("heal_on_attack", heal_on_attack))
 	heal_on_attack_ratio = float(data.get("heal_on_attack_ratio", heal_on_attack_ratio))
+	explode_on_attack = bool(data.get("explode_on_attack", explode_on_attack))
+	explosion_radius = int(data.get("explosion_radius", explosion_radius))
+	explosion_player_damage = int(data.get("explosion_player_damage", explosion_player_damage))
 	is_boss = bool(data.get("is_boss", is_boss))
 	spawn_weight = int(data.get("spawn_weight", spawn_weight))
 	xp_bonus = int(data.get("xp_bonus", xp_bonus))
@@ -52,7 +60,11 @@ func to_enemy_tile() -> Dictionary:
 		"icon_path": icon_path,
 		"hp": hp,
 		"max_hp": hp,
+		"base_hp": hp,
 		"dmg": dmg,
+		"base_dmg": dmg,
+		"defense": defense,
+		"base_defense": defense,
 		"timer": timer,
 		"attack_cooldown": attack_cooldown,
 		"reset_timer_on_hit": reset_timer_on_hit,
@@ -60,6 +72,9 @@ func to_enemy_tile() -> Dictionary:
 		"remove_on_attack": remove_on_attack,
 		"heal_on_attack": heal_on_attack,
 		"heal_on_attack_ratio": heal_on_attack_ratio,
+		"explode_on_attack": explode_on_attack,
+		"explosion_radius": explosion_radius,
+		"explosion_player_damage": explosion_player_damage,
 		"is_boss": is_boss,
 		"xp_bonus": xp_bonus,
 		"gold_bonus": gold_bonus,

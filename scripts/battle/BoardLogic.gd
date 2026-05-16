@@ -1,6 +1,8 @@
 extends RefCounted
 class_name BoardLogic
 
+const MIN_CHAIN_LENGTH := 3
+
 # Чистая логика поля. Никаких нод — только данные.
 # grid[y][x] — словарь.
 # Enemy tile snapshot includes monster_id/icon_path/hp/dmg/timer and reward hooks.
@@ -11,6 +13,7 @@ var grid: Array = []     # Array[Array[Dictionary]]
 var rng := RandomNumberGenerator.new()
 var enemy_spawn_chance: float = 0.0
 var monster_weights: Dictionary = {}
+var monster_profile: Dictionary = {}
 
 func _init(w: int = 6, h: int = 6, rng_seed: int = 0) -> void:
 	width = w
@@ -60,7 +63,7 @@ static func are_neighbors(a: Vector2, b: Vector2) -> bool:
 #   - соседние позиции — реально соседи,
 #   - все типы можно связать (TileType.can_link).
 func is_valid_chain(path: Array) -> bool:
-	if path.size() < 2:
+	if path.size() < MIN_CHAIN_LENGTH:
 		return false
 	var seen := {}
 	for i in range(path.size()):
@@ -106,11 +109,21 @@ func _make_random_basic() -> Dictionary:
 	return {"kind": TileType.Kind.SWORD}
 
 func _make_enemy(monster_id: String = "") -> Dictionary:
-	return MonsterCatalog.make_enemy_tile(rng, monster_id, monster_weights)
+	return MonsterCatalog.make_enemy_tile(rng, monster_id, monster_weights, monster_profile)
 
-func configure_spawn(enemy_chance: float, weights: Dictionary = {}) -> void:
+func configure_spawn(enemy_chance: float, weights: Dictionary = {}, profile: Dictionary = {}) -> void:
 	enemy_spawn_chance = enemy_chance
 	monster_weights = weights.duplicate(true)
+	monster_profile = profile.duplicate(true)
+
+func refresh_enemy_scaling(enemy_chance: float, profile: Dictionary) -> void:
+	enemy_spawn_chance = enemy_chance
+	monster_profile = profile.duplicate(true)
+	for y in range(height):
+		for x in range(width):
+			var t = grid[y][x]
+			if t.kind == TileType.Kind.ENEMY:
+				MonsterCatalog.rescale_enemy_tile(t, monster_profile, rng)
 
 func spawn_enemy(monster_id: String) -> Vector2:
 	var candidates := []

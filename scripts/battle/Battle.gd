@@ -59,11 +59,12 @@ func _on_turn_ended() -> void:
 		await board.play_enemy_attacks(attackers)
 	var consumed_attackers: Array = []
 	var consumed_keys := {}
+	var total_enemy_damage := 0
 	for ep in attackers:
 		var t = board.logic.get_tile(ep)
 		if t.kind == TileType.Kind.ENEMY:
 			var attack_damage := int(t.dmg)
-			RunState.take_damage(attack_damage)
+			total_enemy_damage += attack_damage
 			if bool(t.get("heal_on_attack", false)):
 				var intended_heal := int(ceil(float(attack_damage) * float(t.get("heal_on_attack_ratio", 1.0))))
 				var before_hp := int(t.hp)
@@ -75,7 +76,7 @@ func _on_turn_ended() -> void:
 			if bool(t.get("explode_on_attack", false)):
 				var blast_damage := int(t.get("explosion_player_damage", 0))
 				if blast_damage > 0:
-					RunState.take_damage(blast_damage)
+					total_enemy_damage += blast_damage
 					board.show_float_at_grid(ep, "-%d" % [blast_damage], Color(1.0, 0.62, 0.24), Vector2(0, -78))
 				for blast_pos in _collect_explosion_positions(ep, int(t.get("explosion_radius", 1))):
 					var blast_key := "%d,%d" % [int(blast_pos.x), int(blast_pos.y)]
@@ -88,6 +89,8 @@ func _on_turn_ended() -> void:
 				if not consumed_keys.has(attacker_key):
 					consumed_keys[attacker_key] = true
 					consumed_attackers.append(ep)
+	if total_enemy_damage > 0:
+		RunState.take_damage(total_enemy_damage)
 	if consumed_attackers.size() > 0:
 		await board.consume_and_refill(consumed_attackers)
 	else:

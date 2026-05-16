@@ -552,29 +552,58 @@ static func _cmp_name(a: Dictionary, b: Dictionary) -> bool:
 	var an := str(a.get("title", "")).to_lower()
 	var bn := str(b.get("title", "")).to_lower()
 	if an == bn:
-		return _cmp_rarity(a, b)
+		return _cmp_rarity_then_slot(a, b)
 	return an < bn
 
 static func _cmp_rarity(a: Dictionary, b: Dictionary) -> bool:
 	var ar := rarity_rank(str(a.get("rarity", "common")))
 	var br := rarity_rank(str(b.get("rarity", "common")))
 	if ar == br:
-		return _cmp_name(a, b)
+		return _cmp_name_then_slot(a, b)
 	return ar > br
 
 static func _cmp_slot(a: Dictionary, b: Dictionary) -> bool:
 	var aslot := int(SLOT_ORDER.get(str(a.get("slot", "")), 999))
 	var bslot := int(SLOT_ORDER.get(str(b.get("slot", "")), 999))
 	if aslot == bslot:
-		return _cmp_rarity(a, b)
+		return _cmp_rarity_then_name(a, b)
 	return aslot < bslot
 
 static func _cmp_type(a: Dictionary, b: Dictionary) -> bool:
 	var atype := int(TYPE_ORDER.get(str(a.get("item_type", "")), 999))
 	var btype := int(TYPE_ORDER.get(str(b.get("item_type", "")), 999))
 	if atype == btype:
-		return _cmp_rarity(a, b)
+		return _cmp_rarity_then_name(a, b)
 	return atype < btype
+
+static func _cmp_name_then_slot(a: Dictionary, b: Dictionary) -> bool:
+	var an := str(a.get("title", "")).to_lower()
+	var bn := str(b.get("title", "")).to_lower()
+	if an != bn:
+		return an < bn
+	var aslot := int(SLOT_ORDER.get(str(a.get("slot", "")), 999))
+	var bslot := int(SLOT_ORDER.get(str(b.get("slot", "")), 999))
+	if aslot != bslot:
+		return aslot < bslot
+	return str(a.get("id", "")) < str(b.get("id", ""))
+
+static func _cmp_rarity_then_name(a: Dictionary, b: Dictionary) -> bool:
+	var ar := rarity_rank(str(a.get("rarity", "common")))
+	var br := rarity_rank(str(b.get("rarity", "common")))
+	if ar != br:
+		return ar > br
+	return _cmp_name_then_slot(a, b)
+
+static func _cmp_rarity_then_slot(a: Dictionary, b: Dictionary) -> bool:
+	var ar := rarity_rank(str(a.get("rarity", "common")))
+	var br := rarity_rank(str(b.get("rarity", "common")))
+	if ar != br:
+		return ar > br
+	var aslot := int(SLOT_ORDER.get(str(a.get("slot", "")), 999))
+	var bslot := int(SLOT_ORDER.get(str(b.get("slot", "")), 999))
+	if aslot != bslot:
+		return aslot < bslot
+	return str(a.get("id", "")) < str(b.get("id", ""))
 
 static func _slugify(text: String) -> String:
 	return text.to_lower().replace("'", "").replace(" ", "_")

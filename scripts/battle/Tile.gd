@@ -63,6 +63,8 @@ var _kind_label: Label = null
 var _idle_offset_y: float = 0.0
 var _danger_alpha: float = 0.0
 var _hover_glow_alpha: float = 0.0
+var _preview_kill: bool = false
+var _preview_kill_glow: float = 0.0
 var _icon_base_position: Vector2
 var _stats_base_position: Vector2
 var _label_base_position: Vector2
@@ -81,9 +83,6 @@ func _ready() -> void:
 	_bg.position = -_bg.size / 2
 	_bg.z_index = -1
 
-	# Иконки 64×64; растягиваем под тайл с небольшим запасом.
-	var s: float = (tile_size / 64.0) * 0.62 * icon_scale
-	_icon.scale = Vector2(s, s)
 	_icon.position = Vector2(0, -8)
 	_icon_base_position = _icon.position
 	_icon.z_index = 3
@@ -142,8 +141,12 @@ func _process(delta: float) -> void:
 	if k == TileType.Kind.ENEMY and int(data.get("timer", 3)) <= 1:
 		target_danger = 0.18 + 0.22 * (0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006))
 	_danger_alpha = lerpf(_danger_alpha, target_danger, min(1.0, delta * 10.0))
+	var preview_target := 0.0
+	if _preview_kill:
+		preview_target = 0.42 + 0.18 * (0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008))
+	_preview_kill_glow = lerpf(_preview_kill_glow, preview_target, min(1.0, delta * 10.0))
 
-	if abs(previous_offset - _idle_offset_y) > 0.001 or _danger_alpha > 0.01:
+	if abs(previous_offset - _idle_offset_y) > 0.001 or _danger_alpha > 0.01 or _preview_kill_glow > 0.01:
 		_apply_visual_offset()
 		queue_redraw()
 	if hovered:
@@ -161,15 +164,17 @@ func update_view(tile_data: Dictionary) -> void:
 		var tex: Texture2D = _get_icon_texture(k)
 		_icon.texture = tex
 		_icon.visible = tex != null
+		_apply_icon_scale(tex)
 		_icon.modulate = Color(1, 0.82, 0.82) if k == TileType.Kind.ENEMY and int(data.get("timer", 3)) <= 1 else Color.WHITE
 	if _stats:
 		if k == TileType.Kind.ENEMY:
 			if bool(data.get("is_boss", false)):
 				_stats.text = Localization.t("tile.boss")
 			else:
-				_stats.text = "%d  %d  %d" % [
+				_stats.text = "%d  %d  %d  %d" % [
 					int(data.get("hp", 0)),
 					int(data.get("dmg", 0)),
+					int(data.get("defense", 0)),
 					int(data.get("timer", 0)),
 				]
 			_stats.visible = true
@@ -220,6 +225,10 @@ func _draw() -> void:
 	if _danger_alpha > 0.01:
 		draw_rect(outer.grow(2.0), Color(0.95, 0.18, 0.12, _danger_alpha), false, 4.0)
 		draw_circle(visual_offset, tile_size * 0.40, Color(0.95, 0.10, 0.08, _danger_alpha * 0.22))
+	if _preview_kill_glow > 0.01:
+		draw_rect(outer.grow(10.0), Color(1.0, 0.22, 0.44, _preview_kill_glow * 0.15), true)
+		draw_rect(outer.grow(4.0), Color(1.0, 0.34, 0.56, _preview_kill_glow), false, 3.0)
+		draw_rect(outer.grow(-1.0), Color(1.0, 0.86, 0.92, _preview_kill_glow * 0.85), false, 1.6)
 
 func set_highlighted(on: bool) -> void:
 	# Идемпотентно: повторный вызов с тем же значением не запускает анимацию.
@@ -329,6 +338,14 @@ func set_hovered(on: bool) -> void:
 		_hover_bg_tween.tween_property(_bg, "modulate", Color(1, 1, 1, 1), 0.08) \
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
+func set_preview_kill(on: bool) -> void:
+	if on == _preview_kill:
+		return
+	_preview_kill = on
+	if not on:
+		_preview_kill_glow = 0.0
+	queue_redraw()
+
 # Проверяет, попадает ли мировая точка в этот тайл (квадрат tile_size x tile_size).
 func contains_point(world_point: Vector2) -> bool:
 	var local := to_local(world_point)
@@ -354,3 +371,18 @@ func _get_icon_texture(kind: int) -> Texture2D:
 			if tex is Texture2D:
 				return tex
 	return ICONS.get(kind, null)
+
+func _apply_icon_scale(tex: Texture2D) -> void:
+	if _icon == null:
+		return
+	if tex == null:
+		_icon.scale = Vector2.ONE
+		return
+	var tex_size: Vector2 = tex.get_size()
+	var longest_side: float = maxf(tex_size.x, tex_size.y)
+	if longest_side <= 0.0:
+		_icon.scale = Vector2.ONE
+		return
+	var target_size: float = tile_size * 0.62 * icon_scale
+	var scale_ratio: float = target_size / longest_side
+	_icon.scale = Vector2.ONE * scale_ratio

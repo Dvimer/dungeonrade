@@ -18,15 +18,22 @@ signal player_damaged(dmg)              # int
 signal player_healed(amount)            # int
 signal shield_changed(value)            # int
 signal gold_changed(value)              # int
+signal shop_charge_changed(current, needed) # int, int
 signal xp_changed(current, needed)      # int, int
 signal level_up(new_level)              # int
 signal rounds_changed(value)            # int
+signal skills_changed()
+signal equipment_changed()
 
 # --- Ход / волна ---
 signal turn_ended()
 signal wave_started(wave_index)
 signal wave_cleared(wave_index)
 signal player_died()
+signal main_menu_requested()
+signal shop_ready()
+signal shop_offered(choices)            # Array
+signal shop_picked(item)                # Dictionary
 
 # --- Мета ---
 signal upgrade_offered(choices)         # Array

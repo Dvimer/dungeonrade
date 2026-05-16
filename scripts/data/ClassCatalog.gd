@@ -44,13 +44,13 @@ const DEFINITIONS := {
 	},
 }
 
-static func get_class(class_id: String) -> Dictionary:
+static func get_class_data(class_id: String) -> Dictionary:
 	return DEFINITIONS.get(class_id, DEFINITIONS["warrior"]).duplicate(true)
 
 static func get_all_classes() -> Array:
 	var result := []
 	for raw_id in ["warrior", "rogue", "vampire", "alchemist"]:
-		result.append(get_class(str(raw_id)))
+		result.append(get_class_data(str(raw_id)))
 	return result
 
 static func is_unlocked(class_id: String) -> bool:
