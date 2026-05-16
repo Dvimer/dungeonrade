@@ -67,6 +67,8 @@ var _crypt_tab_buttons: Dictionary = {}
 var _crypt_content_box: VBoxContainer = null
 var _crypt_play_button: Button = null
 var _crypt_active_tab: String = "equipment"
+var _class_select_panel: PanelContainer = null
+var _pending_level_id: String = ""
 var _ui_texture_cache: Dictionary = {}
 
 func _ready() -> void:
@@ -162,15 +164,29 @@ func _on_continue_pressed() -> void:
 
 func _on_new_game_pressed() -> void:
 	LevelCatalogScript.reset_campaign_progress()
+	GameState.selected_class = "warrior"
 	SaveSystem.save()
 	var first_level := LevelCatalogScript.get_first_level()
 	if first_level.is_empty():
 		return
-	_start_level(str(first_level.get("id", "")))
+	_start_level_direct(str(first_level.get("id", "")))
 
 func _start_level(level_id: String) -> void:
 	if level_id == "":
 		return
+	var unlocked := ClassCatalogScript.get_all_classes().filter(func(c): return ClassCatalogScript.is_unlocked(str(c.get("id", ""))))
+	if unlocked.size() > 1:
+		_pending_level_id = level_id
+		_class_select_panel.visible = true
+		_level_list_panel.visible = false
+		_skills_panel.visible = false
+		_editor_panel.visible = false
+		if _items_panel != null: _items_panel.visible = false
+		if _crypt_panel != null: _crypt_panel.visible = false
+		return
+	_start_level_direct(level_id)
+
+func _start_level_direct(level_id: String) -> void:
 	GameState.selected_level_id = level_id
 	GameState.last_played_level_id = level_id
 	SaveSystem.save()
@@ -706,6 +722,79 @@ func _build_crypt_panel() -> void:
 	_crypt_play_button.text = "Play"
 	_crypt_play_button.pressed.connect(_on_crypt_play_pressed)
 	root_vbox.add_child(_crypt_play_button)
+	_build_class_select_panel()
+
+func _build_class_select_panel() -> void:
+	_class_select_panel = PanelContainer.new()
+	_class_select_panel.visible = false
+	_class_select_panel.custom_minimum_size = Vector2(680, 0)
+	_class_select_panel.set_anchors_preset(Control.PRESET_CENTER)
+	_class_select_panel.anchor_left = 0.5
+	_class_select_panel.anchor_top = 0.5
+	_class_select_panel.anchor_right = 0.5
+	_class_select_panel.anchor_bottom = 0.5
+	_class_select_panel.offset_left = -340.0
+	_class_select_panel.offset_top = -300.0
+	_class_select_panel.offset_right = 340.0
+	_class_select_panel.offset_bottom = 300.0
+	_menu_root.add_child(_class_select_panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 28)
+	margin.add_theme_constant_override("margin_top", 28)
+	margin.add_theme_constant_override("margin_right", 28)
+	margin.add_theme_constant_override("margin_bottom", 28)
+	_class_select_panel.add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 16)
+	margin.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "Choose Class"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_color_override("font_color", Color(0.952941, 0.823529, 0.478431, 1.0))
+	vbox.add_child(title)
+
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 14)
+	vbox.add_child(grid)
+
+	for class_def in ClassCatalogScript.get_all_classes():
+		var class_id := str(class_def.get("id", "warrior"))
+		if not ClassCatalogScript.is_unlocked(class_id):
+			continue
+		var btn := Button.new()
+		btn.custom_minimum_size = Vector2(290, 90)
+		btn.add_theme_font_size_override("font_size", 17)
+		var icon := str(class_def.get("icon_text", "?"))
+		var name_text := str(class_def.get("title", class_id))
+		var desc := str(class_def.get("description", ""))
+		btn.text = "%s  %s\n%s" % [icon, name_text, desc]
+		btn.clip_text = false
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn.modulate = ClassCatalogScript.rarity_color_for(class_id)
+		btn.pressed.connect(_on_class_selected.bind(class_id))
+		grid.add_child(btn)
+
+	var back_btn := Button.new()
+	back_btn.custom_minimum_size = Vector2(0, 50)
+	back_btn.text = "Back"
+	back_btn.pressed.connect(func():
+		_class_select_panel.visible = false
+		_pending_level_id = ""
+	)
+	vbox.add_child(back_btn)
+
+func _on_class_selected(class_id: String) -> void:
+	GameState.selected_class = class_id
+	_class_select_panel.visible = false
+	if _pending_level_id != "":
+		_start_level_direct(_pending_level_id)
+		_pending_level_id = ""
 
 func _open_crypt_panel() -> void:
 	if _crypt_panel == null:
