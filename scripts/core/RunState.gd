@@ -368,7 +368,7 @@ func _try_offer_shop() -> void:
 
 func _roll_shop_choices() -> Array:
 	var available := []
-	for item in EquipmentCatalogScript.get_shop_items():
+	for item in EquipmentCatalogScript.get_available_items():
 		if not _has_equipment(str(item.get("id", ""))):
 			available.append(item)
 	if available.is_empty():
