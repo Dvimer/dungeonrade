@@ -7,19 +7,26 @@ extends Node2D
 @export var hud_path: NodePath
 
 const WaveCatalogScript := preload("res://scripts/data/WaveCatalog.gd")
+const LevelCatalogScript := preload("res://scripts/data/LevelCatalog.gd")
+const EnemyScalingCatalogScript := preload("res://scripts/data/EnemyScalingCatalog.gd")
 
 @onready var board: Board = get_node(board_path)
 @onready var hud: Node = get_node(hud_path) if hud_path != NodePath("") else null
 
 var _combo_label: Label
 var _boss_killed_this_turn: bool = false
+var _run_finished: bool = false
+var _bosses_killed: int = 0
 
 func _ready() -> void:
-	RunState.reset()
+	LevelCatalogScript.ensure_initialized()
+	var selected_level := LevelCatalogScript.get_level(GameState.selected_level_id)
+	RunState.start_level_run(selected_level)
 	EventBus.turn_ended.connect(_on_turn_ended)
 	EventBus.chain_resolved.connect(_on_chain_resolved)
 	EventBus.player_damaged.connect(_on_player_damaged)
 	EventBus.player_died.connect(_on_player_died)
+	EventBus.run_started.emit()
 	_setup_combo_label()
 	_start_next_wave()
 	queue_redraw()
@@ -46,10 +53,12 @@ func _draw() -> void:
 
 func _on_turn_ended() -> void:
 	RunState.spend_round(1)
+	_refresh_enemy_scaling()
 	var attackers: Array = board.logic.tick_enemies()
 	if attackers.size() > 0:
 		await board.play_enemy_attacks(attackers)
 	var consumed_attackers: Array = []
+	var consumed_keys := {}
 	for ep in attackers:
 		var t = board.logic.get_tile(ep)
 		if t.kind == TileType.Kind.ENEMY:
@@ -63,13 +72,37 @@ func _on_turn_ended() -> void:
 				if actual_heal > 0:
 					t.hp = after_hp
 					board.show_float_at_grid(ep, "+%d" % [actual_heal], Color(1.0, 0.25, 0.35), Vector2(0, -54))
-			if bool(t.get("remove_on_attack", true)):
-				consumed_attackers.append(ep)
+			if bool(t.get("explode_on_attack", false)):
+				var blast_damage := int(t.get("explosion_player_damage", 0))
+				if blast_damage > 0:
+					RunState.take_damage(blast_damage)
+					board.show_float_at_grid(ep, "-%d" % [blast_damage], Color(1.0, 0.62, 0.24), Vector2(0, -78))
+				for blast_pos in _collect_explosion_positions(ep, int(t.get("explosion_radius", 1))):
+					var blast_key := "%d,%d" % [int(blast_pos.x), int(blast_pos.y)]
+					if consumed_keys.has(blast_key):
+						continue
+					consumed_keys[blast_key] = true
+					consumed_attackers.append(blast_pos)
+			elif bool(t.get("remove_on_attack", false)):
+				var attacker_key := "%d,%d" % [int(ep.x), int(ep.y)]
+				if not consumed_keys.has(attacker_key):
+					consumed_keys[attacker_key] = true
+					consumed_attackers.append(ep)
 	if consumed_attackers.size() > 0:
 		await board.consume_and_refill(consumed_attackers)
 	else:
 		board.sync_view()
 	_advance_wave_if_needed()
+
+func _collect_explosion_positions(center: Vector2, radius: int) -> Array:
+	var affected := []
+	for y in range(int(center.y) - radius, int(center.y) + radius + 1):
+		for x in range(int(center.x) - radius, int(center.x) + radius + 1):
+			var pos := Vector2(x, y)
+			if not board.logic.in_bounds(pos):
+				continue
+			affected.append(pos)
+	return affected
 
 func _on_chain_resolved(result) -> void:
 	# Сюда повесим juicy-эффекты: тряска, текст комбо, slow-mo.
@@ -83,12 +116,13 @@ func _on_chain_resolved(result) -> void:
 		xp_gain += 5 + int(enemy.get("xp_bonus", 0))
 		if bool(enemy.get("is_boss", false)):
 			_boss_killed_this_turn = true
+			_bosses_killed += 1
 	if xp_gain > 0:
 		RunState.add_xp(xp_gain)
 
 func _on_player_died() -> void:
 	print("Player died — game over")
-	# TODO: переход на экран результатов.
+	_finish_run(false)
 
 func _on_player_damaged(_amount: int) -> void:
 	var original := board.position
@@ -150,11 +184,26 @@ func _draw_vignette(s: Vector2) -> void:
 	draw_rect(Rect2(Vector2(s.x - 38, 0), Vector2(38, s.y)), Color(0, 0, 0, 0.28), true)
 
 func _start_next_wave() -> void:
+	if RunState.wave >= RunState.total_waves:
+		_finish_run(true)
+		return
 	var next_index := RunState.wave + 1
-	var wave = WaveCatalogScript.get_wave(next_index)
+	var wave = WaveCatalogScript.get_wave_for_level(RunState.current_level, next_index)
 	RunState.start_wave(wave.to_dictionary())
 	board.apply_wave_profile(RunState.current_wave, next_index == 1)
+	_refresh_enemy_scaling()
 	_show_combo(Localization.t("hud.wave", [RunState.wave, RunState.rounds_left]))
+
+func _refresh_enemy_scaling() -> void:
+	if board == null or board.logic == null:
+		return
+	var runtime_wave := EnemyScalingCatalogScript.build_runtime_wave(RunState.current_wave, RunState.total_turns_taken)
+	RunState.current_wave["monster_profile"] = runtime_wave.get("monster_profile", {}).duplicate(true)
+	RunState.current_wave["enemy_spawn_chance"] = float(runtime_wave.get("enemy_spawn_chance", RunState.current_wave.get("enemy_spawn_chance", 0.0)))
+	board.refresh_enemy_scaling(
+		float(runtime_wave.get("enemy_spawn_chance", 0.0)),
+		runtime_wave.get("monster_profile", {})
+	)
 
 func _advance_wave_if_needed() -> void:
 	if RunState.boss_active:
@@ -163,6 +212,9 @@ func _advance_wave_if_needed() -> void:
 			return
 		_boss_killed_this_turn = false
 		RunState.clear_wave()
+		if RunState.wave >= RunState.total_waves:
+			_finish_run(true)
+			return
 		_start_next_wave()
 		return
 	if not RunState.is_wave_timer_done():
@@ -172,6 +224,9 @@ func _advance_wave_if_needed() -> void:
 		_start_boss_phase(wave_config)
 	else:
 		RunState.clear_wave()
+		if RunState.wave >= RunState.total_waves:
+			_finish_run(true)
+			return
 		_start_next_wave()
 
 func _should_start_boss(wave_config: Dictionary) -> bool:
@@ -190,3 +245,18 @@ func _start_boss_phase(wave_config: Dictionary) -> void:
 	if pos.x >= 0:
 		board.show_float_at_grid(pos, Localization.t("combat.boss"), Color(1.0, 0.66, 0.24), Vector2(0, -58))
 	_show_combo(Localization.t("combat.boss"))
+
+func _finish_run(won: bool) -> void:
+	if _run_finished:
+		return
+	_run_finished = true
+	EventBus.run_finished.emit({
+		"won": won,
+		"level_id": RunState.level_id,
+		"level_title": RunState.level_title,
+		"wave": RunState.wave,
+		"total_waves": RunState.total_waves,
+		"gold": RunState.gold,
+		"xp": RunState.xp,
+		"bosses_killed": _bosses_killed,
+	})
