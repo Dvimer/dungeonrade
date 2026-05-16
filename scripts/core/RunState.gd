@@ -35,6 +35,8 @@ var boss_active: bool = false
 var skill_pool_ids: Array = []
 var active_skills: Array = []
 var active_equipment: Array = []
+var skill_cooldowns: Dictionary = {}   # skill_id -> turns remaining (0 = ready)
+var next_crit_forced: bool = false
 var pending_skill_upgrades: int = 0
 var awaiting_upgrade_choice: bool = false
 var offered_upgrades: Array = []
@@ -52,6 +54,7 @@ var class_passive: String = ""
 func _ready() -> void:
 	EventBus.upgrade_picked.connect(_on_upgrade_picked)
 	EventBus.shop_picked.connect(_on_shop_picked)
+	EventBus.turn_ended.connect(_tick_skill_cooldowns)
 
 func reset() -> void:
 	hp = MAX_HP_DEFAULT
@@ -78,6 +81,8 @@ func reset() -> void:
 	skill_pool_ids = []
 	active_skills = []
 	active_equipment = []
+	skill_cooldowns = {}
+	next_crit_forced = false
 	pending_skill_upgrades = 0
 	awaiting_upgrade_choice = false
 	offered_upgrades = []
@@ -195,7 +200,7 @@ func add_shield(amount: int) -> void:
 	shield = mini(max_shield, shield + amount)
 	EventBus.emit_signal("shield_changed", shield)
 
-func add_gold(amount: int) -> void:
+func add_gold(amount: int) -> int:
 	var gold_pct := float(mod("gold_bonus_pct", 0.0))
 	if gold_pct > 0.0:
 		amount = int(ceil(float(amount) * (1.0 + gold_pct)))
@@ -208,6 +213,7 @@ func add_gold(amount: int) -> void:
 		pending_shop_count += 1
 		EventBus.emit_signal("shop_ready")
 		_try_offer_shop()
+	return amount
 
 func spend_round(amount: int = 1) -> void:
 	total_turns_taken += maxi(0, amount)
@@ -314,6 +320,7 @@ func _apply_skill_pick(skill_id: String) -> void:
 		var skill := SkillCatalogScript.get_skill(skill_id)
 		skill["level"] = 1
 		active_skills.append(skill)
+		skill_cooldowns[skill_id] = 0
 	_recompute_skill_bonuses()
 
 func _recompute_skill_bonuses() -> void:
@@ -344,6 +351,49 @@ func _recompute_skill_bonuses() -> void:
 				add_mod(str(key), int(item_value))
 	shield = mini(shield, max_shield)
 	EventBus.emit_signal("shield_changed", shield)
+
+func get_skill_cooldown(skill_id: String) -> int:
+	return int(skill_cooldowns.get(skill_id, 0))
+
+func _tick_skill_cooldowns() -> void:
+	var changed := false
+	for skill_id in skill_cooldowns.keys():
+		if skill_cooldowns[skill_id] > 0:
+			skill_cooldowns[skill_id] -= 1
+			changed = true
+	if changed:
+		EventBus.emit_signal("skills_changed")
+
+func activate_skill(skill_id: String, board_logic: BoardLogic) -> bool:
+	if get_skill_cooldown(skill_id) > 0:
+		return false
+	var skill_data: Dictionary = {}
+	for s in active_skills:
+		if str(s.get("id", "")) == skill_id:
+			skill_data = s
+			break
+	if skill_data.is_empty():
+		return false
+	var effect_id := str(skill_data.get("effect_id", ""))
+	if effect_id == "":
+		return false
+	var script = SkillCatalogScript.get_effect_script(effect_id)
+	if script == null:
+		return false
+	var effect: SkillEffect = script.new()
+	var result: Dictionary = effect.apply(self, board_logic)
+	if bool(result.get("next_crit_set", false)):
+		next_crit_forced = true
+	var tiles_cleared: Array = result.get("tiles_cleared", [])
+	if tiles_cleared.size() > 0:
+		EventBus.emit_signal("tiles_skill_cleared", tiles_cleared)
+	var level: int = maxi(1, int(skill_data.get("level", 1)))
+	var base_cd: int = int(skill_data.get("cooldown_base", 0))
+	var reduction: int = int(skill_data.get("cooldown_reduction_per_level", 1))
+	var final_cd: int = maxi(1, base_cd - (level - 1) * reduction)
+	skill_cooldowns[skill_id] = final_cd
+	EventBus.emit_signal("skills_changed")
+	return true
 
 func _has_active_skill(skill_id: String) -> bool:
 	return _skill_level(skill_id) > 0

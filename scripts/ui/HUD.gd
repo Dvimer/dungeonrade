@@ -79,17 +79,30 @@ func _refresh_skill_slots() -> void:
 		return
 	for child in _skill_slots.get_children():
 		child.queue_free()
+	var filled := 0
 	for skill in RunState.active_skills:
 		_skill_slots.add_child(_make_skill_card(skill))
-	while _skill_slots.get_child_count() < 4:
+		filled += 1
+	while filled < 4:
 		_skill_slots.add_child(_make_empty_skill_card())
+		filled += 1
 
 func _make_skill_card(skill: Dictionary) -> Control:
+	var skill_id := str(skill.get("id", ""))
+	var is_active := str(skill.get("skill_kind", "passive")) == "active"
+	var cooldown: int = RunState.get_skill_cooldown(skill_id)
+	var is_ready := cooldown <= 0
+
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(112, 88)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.10, 0.10, 0.18, 0.94)
-	style.border_color = skill.get("color", Color(0.55, 0.40, 0.95, 1.0))
+	var border_col: Color = skill.get("color", Color(0.55, 0.40, 0.95, 1.0))
+	if is_active and not is_ready:
+		style.bg_color = Color(0.08, 0.08, 0.14, 0.94)
+		border_col = border_col.darkened(0.55)
+	else:
+		style.bg_color = Color(0.10, 0.10, 0.18, 0.94)
+	style.border_color = border_col
 	style.border_width_left = 3
 	style.border_width_top = 3
 	style.border_width_right = 3
@@ -108,26 +121,45 @@ func _make_skill_card(skill: Dictionary) -> Control:
 	panel.add_child(box)
 
 	var icon := Label.new()
-	icon.text = Localization.skill_icon_text(str(skill.get("id", "")), str(skill.get("icon_text", "SKILL")))
+	icon.text = Localization.skill_icon_text(skill_id, str(skill.get("icon_text", "SKILL")))
 	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	icon.add_theme_font_size_override("font_size", 16)
-	icon.add_theme_color_override("font_color", skill.get("color", Color.WHITE))
+	icon.add_theme_color_override("font_color", border_col)
 	box.add_child(icon)
 
 	var title := Label.new()
-	title.text = Localization.skill_short_name(str(skill.get("id", "")), str(skill.get("short_title", skill.get("title", "Skill"))))
+	title.text = Localization.skill_short_name(skill_id, str(skill.get("short_title", skill.get("title", "Skill"))))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 18)
 	title.add_theme_color_override("font_color", Color(0.95, 0.94, 1.0))
 	box.add_child(title)
 
-	var level := Label.new()
-	level.text = Localization.t("hud.level", [int(skill.get("level", 1))])
-	level.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	level.add_theme_font_size_override("font_size", 18)
-	level.add_theme_color_override("font_color", Color(0.88, 0.82, 1.0))
+	var bottom_label := Label.new()
+	if is_active:
+		if is_ready:
+			bottom_label.text = Localization.t("hud.skill.ready")
+			bottom_label.add_theme_color_override("font_color", Color(0.52, 1.0, 0.62))
+		else:
+			bottom_label.text = str(cooldown)
+			bottom_label.add_theme_color_override("font_color", Color(0.70, 0.68, 0.82))
+	else:
+		bottom_label.text = Localization.t("hud.level", [int(skill.get("level", 1))])
+		bottom_label.add_theme_color_override("font_color", Color(0.88, 0.82, 1.0))
+	bottom_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	bottom_label.add_theme_font_size_override("font_size", 18)
 	box.add_spacer(false)
-	box.add_child(level)
+	box.add_child(bottom_label)
+
+	if is_active and is_ready:
+		var btn := Button.new()
+		btn.flat = true
+		btn.set_anchors_preset(Control.PRESET_FULL_RECT)
+		btn.mouse_filter = Control.MOUSE_FILTER_STOP
+		btn.pressed.connect(func():
+			EventBus.emit_signal("skill_tapped", skill_id)
+		)
+		panel.add_child(btn)
+
 	return panel
 
 func _make_empty_skill_card() -> Control:

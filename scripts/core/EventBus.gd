@@ -35,6 +35,10 @@ signal shop_ready()
 signal shop_offered(choices)            # Array
 signal shop_picked(item)                # Dictionary
 
+# --- Навыки ---
+signal skill_tapped(skill_id)           # String — HUD запрашивает активацию
+signal tiles_skill_cleared(positions)   # Array[Vector2] — Battle очищает тайлы
+
 # --- Мета ---
 signal upgrade_offered(choices)         # Array
 signal upgrade_picked(upgrade)

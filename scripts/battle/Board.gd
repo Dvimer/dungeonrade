@@ -631,7 +631,20 @@ func show_chain_preview(path: Array, world_point: Vector2) -> void:
 			text = Localization.t("preview.shield", [amount])
 		TileType.Kind.COIN:
 			_clear_preview_kills()
-			text = Localization.t("preview.gold", [amount])
+			var resource_count := 0
+			for _p in path:
+				var _k: int = logic.get_tile(_p).kind
+				if _k != TileType.Kind.ENEMY and _k != TileType.Kind.EMPTY:
+					resource_count += 1
+			var combo_mult := 1.0
+			if resource_count >= 8: combo_mult = 2.0
+			elif resource_count >= 6: combo_mult = 1.5
+			elif resource_count >= 4: combo_mult = 1.2
+			var gold_preview := int(round(float(amount) * combo_mult))
+			var gold_pct := float(RunState.mod("gold_bonus_pct", 0.0))
+			if gold_pct > 0.0:
+				gold_preview = int(ceil(float(gold_preview) * (1.0 + gold_pct)))
+			text = Localization.t("preview.gold", [gold_preview])
 		_:
 			_clear_preview_kills()
 			text = "+%d" % [amount]
@@ -752,13 +765,18 @@ func _spawn_kill_burst(pos: Vector2) -> void:
 		{"text": "✦", "offset": Vector2(0, -4), "color": Color(1.0, 0.92, 0.68), "size": 20, "scale": 0.58},
 	]
 	for spec in burst_specs:
+		var burst_text: String = str(spec["text"])
+		var burst_offset: Vector2 = spec["offset"]
+		var burst_color: Color = spec["color"]
+		var burst_size: int = int(spec["size"])
+		var burst_scale: float = float(spec["scale"])
 		show_float_at_grid(
 			pos,
-			str(spec["text"]),
-			spec["color"],
-			spec["offset"],
-			int(spec["size"]),
-			float(spec["scale"])
+			burst_text,
+			burst_color,
+			burst_offset,
+			burst_size,
+			burst_scale
 		)
 
 func show_float_at_grid(

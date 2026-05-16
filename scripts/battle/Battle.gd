@@ -26,6 +26,8 @@ func _ready() -> void:
 	EventBus.chain_resolved.connect(_on_chain_resolved)
 	EventBus.player_damaged.connect(_on_player_damaged)
 	EventBus.player_died.connect(_on_player_died)
+	EventBus.skill_tapped.connect(_on_skill_tapped)
+	EventBus.tiles_skill_cleared.connect(_on_tiles_skill_cleared)
 	EventBus.run_started.emit()
 	_setup_combo_label()
 	_start_next_wave()
@@ -126,6 +128,17 @@ func _on_chain_resolved(result) -> void:
 func _on_player_died() -> void:
 	print("Player died — game over")
 	_finish_run(false)
+
+func _on_skill_tapped(skill_id: String) -> void:
+	if board == null or board.is_animating:
+		return
+	RunState.activate_skill(skill_id, board.logic)
+
+func _on_tiles_skill_cleared(positions: Array) -> void:
+	if board == null or positions.is_empty():
+		return
+	await board.consume_and_refill(positions)
+	board.sync_view()
 
 func _on_player_damaged(_amount: int) -> void:
 	var original := board.position

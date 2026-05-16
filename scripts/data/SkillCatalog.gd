@@ -3,6 +3,18 @@ class_name SkillCatalog
 
 const SkillTypeScript := preload("res://scripts/data/SkillType.gd")
 
+const EFFECT_SCRIPTS := {
+	"collect_gold": preload("res://scripts/data/effects/EffectCollectGold.gd"),
+	"damage_all":   preload("res://scripts/data/effects/EffectDamageAll.gd"),
+	"sweep_rows":   preload("res://scripts/data/effects/EffectSweepRows.gd"),
+	"full_heal":    preload("res://scripts/data/effects/EffectFullHeal.gd"),
+	"reset_timers": preload("res://scripts/data/effects/EffectResetTimers.gd"),
+	"next_crit":    preload("res://scripts/data/effects/EffectNextCrit.gd"),
+}
+
+static func get_effect_script(effect_id: String):
+	return EFFECT_SCRIPTS.get(effect_id, null)
+
 const DEFINITIONS := {
 	"bone_crown": {
 		"id": "bone_crown",
@@ -94,6 +106,84 @@ const DEFINITIONS := {
 		"color": Color(0.34, 1.0, 0.32, 1.0),
 		"bonuses": {"sword_damage_bonus": 1, "crit_chance": 0.05},
 	},
+	"gold_sweep": {
+		"id": "gold_sweep",
+		"title": "Gold Sweep",
+		"short_title": "Sweep",
+		"description": "Collect all gold from the board instantly.",
+		"icon_text": "SWEEP",
+		"color": Color(0.98, 0.80, 0.22, 1.0),
+		"skill_kind": "active",
+		"cooldown_base": 6,
+		"cooldown_reduction_per_level": 1,
+		"effect_id": "collect_gold",
+		"max_level": 5,
+	},
+	"wrath": {
+		"id": "wrath",
+		"title": "Wrath",
+		"short_title": "Wrath",
+		"description": "Deal sword damage to every enemy on the board.",
+		"icon_text": "WRATH",
+		"color": Color(1.0, 0.32, 0.28, 1.0),
+		"skill_kind": "active",
+		"cooldown_base": 8,
+		"cooldown_reduction_per_level": 1,
+		"effect_id": "damage_all",
+		"max_level": 5,
+	},
+	"row_sweep": {
+		"id": "row_sweep",
+		"title": "Row Sweep",
+		"short_title": "Rows",
+		"description": "Collect everything in the bottom two rows.",
+		"icon_text": "ROWS",
+		"color": Color(0.42, 0.72, 1.0, 1.0),
+		"skill_kind": "active",
+		"cooldown_base": 7,
+		"cooldown_reduction_per_level": 1,
+		"effect_id": "sweep_rows",
+		"max_level": 5,
+	},
+	"full_heal": {
+		"id": "full_heal",
+		"title": "Full Heal",
+		"short_title": "Heal",
+		"description": "Restore HP to maximum.",
+		"icon_text": "HEAL",
+		"color": Color(0.40, 1.0, 0.58, 1.0),
+		"skill_kind": "active",
+		"cooldown_base": 12,
+		"cooldown_reduction_per_level": 1,
+		"effect_id": "full_heal",
+		"max_level": 5,
+	},
+	"stasis": {
+		"id": "stasis",
+		"title": "Stasis",
+		"short_title": "Stasis",
+		"description": "Reset all enemy timers to their maximum.",
+		"icon_text": "STOP",
+		"color": Color(0.62, 0.88, 1.0, 1.0),
+		"skill_kind": "active",
+		"cooldown_base": 9,
+		"cooldown_reduction_per_level": 1,
+		"effect_id": "reset_timers",
+		"max_level": 5,
+	},
+	"predator": {
+		"id": "predator",
+		"title": "Predator",
+		"short_title": "Pred",
+		"description": "Your next chain is a guaranteed critical hit.",
+		"icon_text": "CRIT",
+		"color": Color(1.0, 0.60, 0.18, 1.0),
+		"skill_kind": "active",
+		"cooldown_base": 7,
+		"cooldown_reduction_per_level": 1,
+		"effect_id": "next_crit",
+		"max_level": 5,
+	},
 }
 
 static func get_skill(skill_id: String) -> Dictionary:
@@ -109,12 +199,11 @@ static func get_all_skills() -> Array:
 	return result
 
 static func get_default_pool_ids() -> Array:
-	var ids := []
-	for skill in get_all_skills():
-		ids.append(str(skill.get("id", "")))
-		if ids.size() >= 8:
-			break
-	return ids
+	# Куратированный пул: 5 пассивных + 3 активных
+	return [
+		"arc_star", "blood_well", "coin_furnace", "frost_sigils", "thorn_mail",
+		"gold_sweep", "predator", "stasis",
+	]
 
 static func localize_skill(skill: Dictionary) -> Dictionary:
 	var localized := skill.duplicate(true)
@@ -128,6 +217,8 @@ static func localize_skill(skill: Dictionary) -> Dictionary:
 	return localized
 
 static func level_bonus(skill: Dictionary) -> Dictionary:
+	if str(skill.get("skill_kind", "passive")) == "active":
+		return {}
 	var bonuses = skill.get("bonuses", {})
 	if bonuses is Dictionary:
 		return bonuses.duplicate(true)

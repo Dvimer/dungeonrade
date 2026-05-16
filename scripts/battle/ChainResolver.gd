@@ -55,6 +55,10 @@ static func resolve(board: BoardLogic, path: Array, run: Node) -> ChainResult:
 		crit_chance += 0.05 * coins
 	if randf() < crit_chance:
 		result.crit = true
+	# Форсированный крит от активного навыка
+	if not result.crit and "next_crit_forced" in run and bool(run.next_crit_forced):
+		result.crit = true
+		run.next_crit_forced = false
 
 	# --- Урон ---
 	if result.enemies_in_chain.size() > 0:
@@ -114,10 +118,10 @@ static func apply(board: BoardLogic, result: ChainResult, run: Node) -> Array:
 	if result.heal_amount > 0:
 		run.heal(result.heal_amount)
 	if result.gold_gained > 0:
-		run.add_gold(result.gold_gained)
+		result.gold_gained = run.add_gold(result.gold_gained)
 	if kill_gold_bonus > 0:
-		result.gold_gained += kill_gold_bonus
-		run.add_gold(kill_gold_bonus)
+		var kill_gold_actual: int = run.add_gold(kill_gold_bonus)
+		result.gold_gained += kill_gold_actual
 
 	# Готовим список позиций к очистке: всё из цепи, плюс убитые враги (на случай,
 	# если они не вошли в путь, но получили урон через AoE-эффекты — задел на будущее).
