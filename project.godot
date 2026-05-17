@@ -24,6 +24,7 @@ RunState="*res://scripts/core/RunState.gd"
 SaveSystem="*res://scripts/core/SaveSystem.gd"
 YandexSDK="*res://scripts/core/YandexSDK.gd"
 Localization="*res://scripts/core/Localization.gd"
+AudioManager="*res://scripts/core/AudioManager.gd"
 
 [display]
 
