@@ -503,6 +503,117 @@ func equipped_item_titles() -> Array:
 		result.append(Localization.item_name(str(item.get("id", "")), str(item.get("title", ""))))
 	return result
 
+func to_dict() -> Dictionary:
+	# wave сохраняем -1, чтобы _start_next_wave() при возобновлении
+	# перезапустила текущую волну (boards не сохраняется).
+	return {
+		"hp": hp,
+		"max_hp": max_hp,
+		"shield": shield,
+		"max_shield": max_shield,
+		"base_max_shield": base_max_shield,
+		"gold": gold,
+		"shop_charge": shop_charge,
+		"shop_charge_needed": shop_charge_needed,
+		"wave": maxi(0, wave - 1),
+		"total_waves": total_waves,
+		"score": score,
+		"level": level,
+		"xp": xp,
+		"total_turns_taken": total_turns_taken,
+		"current_level": current_level.duplicate(true),
+		"level_id": level_id,
+		"level_title": level_title,
+		"level_description": level_description,
+		"skill_pool_ids": skill_pool_ids.duplicate(),
+		"active_skills": active_skills.duplicate(true),
+		"active_equipment": active_equipment.duplicate(true),
+		"skill_cooldowns": skill_cooldowns.duplicate(),
+		"next_crit_forced": next_crit_forced,
+		"next_crit_forced_mult": next_crit_forced_mult,
+		"pending_skill_upgrades": pending_skill_upgrades,
+		"awaiting_upgrade_choice": awaiting_upgrade_choice,
+		"offered_upgrades": offered_upgrades.duplicate(true),
+		"pending_shop_count": pending_shop_count,
+		"awaiting_shop_choice": awaiting_shop_choice,
+		"offered_shop_items": offered_shop_items.duplicate(true),
+		"base_modifiers": base_modifiers.duplicate(true),
+		"active_class": active_class,
+		"class_passive": class_passive,
+	}
+
+func from_dict(data: Dictionary) -> void:
+	hp                    = int(data.get("hp", MAX_HP_DEFAULT))
+	max_hp                = int(data.get("max_hp", MAX_HP_DEFAULT))
+	shield                = int(data.get("shield", 0))
+	base_max_shield       = int(data.get("base_max_shield", DEFAULT_MAX_SHIELD))
+	max_shield            = int(data.get("max_shield", base_max_shield))
+	gold                  = int(data.get("gold", 0))
+	shop_charge           = int(data.get("shop_charge", 0))
+	shop_charge_needed    = int(data.get("shop_charge_needed", DEFAULT_SHOP_CHARGE_NEEDED))
+	wave                  = int(data.get("wave", 0))
+	total_waves           = int(data.get("total_waves", 1))
+	score                 = int(data.get("score", 0))
+	level                 = int(data.get("level", 1))
+	xp                    = int(data.get("xp", 0))
+	total_turns_taken     = int(data.get("total_turns_taken", 0))
+	level_id              = str(data.get("level_id", ""))
+	level_title           = str(data.get("level_title", ""))
+	level_description     = str(data.get("level_description", ""))
+	active_class          = str(data.get("active_class", GameState.selected_class))
+	class_passive         = str(data.get("class_passive", ""))
+	next_crit_forced      = bool(data.get("next_crit_forced", false))
+	next_crit_forced_mult = float(data.get("next_crit_forced_mult", 2.0))
+	pending_skill_upgrades = int(data.get("pending_skill_upgrades", 0))
+	awaiting_upgrade_choice = bool(data.get("awaiting_upgrade_choice", false))
+	pending_shop_count    = int(data.get("pending_shop_count", 0))
+	awaiting_shop_choice  = bool(data.get("awaiting_shop_choice", false))
+	pending_skill_sweeps  = 0
+	_pending_sweep_skill_id = ""
+	boss_active           = false
+	current_wave          = {}
+	rounds_left           = 0
+	if data.has("current_level") and data["current_level"] is Dictionary:
+		current_level = data["current_level"].duplicate(true)
+	if data.has("skill_pool_ids") and data["skill_pool_ids"] is Array:
+		skill_pool_ids = data["skill_pool_ids"].duplicate()
+	if data.has("active_skills") and data["active_skills"] is Array:
+		active_skills = data["active_skills"].duplicate(true)
+	if data.has("active_equipment") and data["active_equipment"] is Array:
+		active_equipment = data["active_equipment"].duplicate(true)
+	if data.has("skill_cooldowns") and data["skill_cooldowns"] is Dictionary:
+		skill_cooldowns = data["skill_cooldowns"].duplicate()
+	if data.has("offered_upgrades") and data["offered_upgrades"] is Array:
+		offered_upgrades = data["offered_upgrades"].duplicate(true)
+	if data.has("offered_shop_items") and data["offered_shop_items"] is Array:
+		offered_shop_items = data["offered_shop_items"].duplicate(true)
+	if data.has("base_modifiers") and data["base_modifiers"] is Dictionary:
+		base_modifiers = data["base_modifiers"].duplicate(true)
+	else:
+		base_modifiers = {}
+	_recompute_skill_bonuses()
+	EventBus.emit_signal("gold_changed", gold)
+	EventBus.emit_signal("shop_charge_changed", shop_charge, shop_charge_needed)
+	EventBus.emit_signal("shield_changed", shield)
+	EventBus.emit_signal("xp_changed", xp, xp_needed_for_next_level())
+	EventBus.emit_signal("skills_changed")
+	EventBus.emit_signal("equipment_changed")
+	EventBus.emit_signal("rounds_changed", rounds_left)
+	# Переоткрываем UI с выборами, если они были активны
+	if awaiting_upgrade_choice and offered_upgrades.size() > 0:
+		call_deferred("_reemit_upgrade_offer")
+	elif awaiting_shop_choice and offered_shop_items.size() > 0:
+		call_deferred("_reemit_shop_offer")
+	elif pending_skill_upgrades > 0 or pending_shop_count > 0:
+		call_deferred("_offer_next_upgrade_if_needed")
+		call_deferred("_try_offer_shop")
+
+func _reemit_upgrade_offer() -> void:
+	EventBus.emit_signal("upgrade_offered", offered_upgrades)
+
+func _reemit_shop_offer() -> void:
+	EventBus.emit_signal("shop_offered", offered_shop_items)
+
 func _class_definition(class_id: String) -> Dictionary:
 	var class_catalog = load("res://scripts/data/ClassCatalog.gd")
 	if class_catalog != null and class_catalog.has_method("get_class_data"):

@@ -20,8 +20,12 @@ var _bosses_killed: int = 0
 
 func _ready() -> void:
 	LevelCatalogScript.ensure_initialized()
-	var selected_level := LevelCatalogScript.get_level(GameState.selected_level_id)
-	RunState.start_level_run(selected_level)
+	var saved_run := GameState.active_run
+	if not saved_run.is_empty() and str(saved_run.get("level_id", "")) == GameState.selected_level_id:
+		RunState.from_dict(saved_run)
+	else:
+		var selected_level := LevelCatalogScript.get_level(GameState.selected_level_id)
+		RunState.start_level_run(selected_level)
 	EventBus.turn_ended.connect(_on_turn_ended)
 	EventBus.chain_resolved.connect(_on_chain_resolved)
 	EventBus.player_damaged.connect(_on_player_damaged)

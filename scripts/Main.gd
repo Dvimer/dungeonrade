@@ -15,6 +15,7 @@ const DEV_LEVELS_OPEN := true
 @onready var _subtitle_label: Label = $MenuLayer/Root/MenuCard/Margin/VBox/SubtitleLabel
 @onready var _summary_label: Label = $MenuLayer/Root/MenuCard/Margin/VBox/SummaryLabel
 @onready var _continue_button: Button = $MenuLayer/Root/MenuCard/Margin/VBox/ContinueButton
+@onready var _new_game_button: Button = $MenuLayer/Root/MenuCard/Margin/VBox/NewGameButton
 @onready var _skills_button: Button = $MenuLayer/Root/MenuCard/Margin/VBox/SkillsButton
 @onready var _choose_level_button: Button = $MenuLayer/Root/MenuCard/Margin/VBox/ChooseLevelButton
 @onready var _create_level_button: Button = $MenuLayer/Root/MenuCard/Margin/VBox/CreateLevelButton
@@ -43,8 +44,15 @@ var _editor_mode: String = ""
 var _editing_level_id: String = ""
 var _selected_skill_ids: Array = []
 var _pending_replacement_skill_id: String = ""
+var _settings_button: Button = null
 var _items_button: Button = null
 var _crypt_button: Button = null
+var _settings_backdrop: ColorRect = null
+var _settings_panel: PanelContainer = null
+var _settings_title: Label = null
+var _settings_sound_label: Label = null
+var _settings_sound_toggle: CheckButton = null
+var _settings_close_button: Button = null
 var _skills_backdrop: ColorRect = null
 var _items_backdrop: ColorRect = null
 var _items_panel: PanelContainer = null
@@ -93,7 +101,9 @@ func _ready() -> void:
 
 func _wire_buttons() -> void:
 	_continue_button.pressed.connect(_on_continue_pressed)
-	$MenuLayer/Root/MenuCard/Margin/VBox/NewGameButton.pressed.connect(_on_new_game_pressed)
+	_new_game_button.pressed.connect(_on_new_game_pressed)
+	if _settings_button != null:
+		_settings_button.pressed.connect(_open_settings_panel)
 	_skills_button.pressed.connect(_open_skills_panel)
 	if _items_button != null:
 		_items_button.pressed.connect(_open_items_panel)
@@ -109,6 +119,10 @@ func _wire_buttons() -> void:
 	$MenuLayer/Root/SkillsPanel/Margin/VBox/ButtonRow/SaveButton.pressed.connect(_save_skill_pool)
 	$MenuLayer/Root/EditorPanel/Margin/VBox/ButtonRow/CancelButton.pressed.connect(func(): _editor_panel.visible = false)
 	$MenuLayer/Root/EditorPanel/Margin/VBox/ButtonRow/SaveButton.pressed.connect(_save_level_from_editor)
+	if _settings_close_button != null:
+		_settings_close_button.pressed.connect(_close_settings_panel)
+	if _settings_sound_toggle != null:
+		_settings_sound_toggle.toggled.connect(_on_sound_toggled)
 
 func _refresh_menu_state() -> void:
 	LevelCatalogScript.ensure_initialized()
@@ -129,12 +143,14 @@ func _refresh_menu_state() -> void:
 	])
 	if _skills_button:
 		_skills_button.text = Localization.t("menu.skills", [_selected_skill_ids.size()])
+	if _settings_button:
+		_settings_button.text = Localization.t("menu.settings")
 	if _items_button:
 		_items_button.text = Localization.t("menu.items")
 	if _crypt_button:
 		_crypt_button.text = Localization.t("menu.crypt", [GameState.skulls, GameState.boss_tokens])
 	_continue_button.text = Localization.t("menu.continue")
-	$MenuLayer/Root/MenuCard/Margin/VBox/NewGameButton.text = Localization.t("menu.new_game")
+	_new_game_button.text = Localization.t("menu.new_game")
 	_choose_level_button.text = Localization.t("menu.pick_level")
 	_create_level_button.text = Localization.t("menu.create_level")
 	_edit_level_button.text = Localization.t("menu.edit_level")
@@ -146,7 +162,8 @@ func _refresh_menu_state() -> void:
 	$MenuLayer/Root/SkillsPanel/Margin/VBox/Title.text = Localization.t("menu.skills.title")
 	$MenuLayer/Root/SkillsPanel/Margin/VBox/AvailableTitle.text = Localization.t("menu.skills.other")
 	_refresh_items_panel_text()
-	_continue_button.disabled = continue_level_id == ""
+	_refresh_settings_panel()
+	_continue_button.disabled = continue_level_id == "" and GameState.active_run.is_empty()
 	_choose_level_button.visible = DEV_LEVELS_OPEN
 	_create_level_button.visible = DEV_LEVELS_OPEN
 	_edit_level_button.visible = DEV_LEVELS_OPEN
@@ -154,6 +171,8 @@ func _refresh_menu_state() -> void:
 func _show_menu() -> void:
 	_menu_root.visible = true
 	_level_list_panel.visible = false
+	if _settings_backdrop != null: _settings_backdrop.visible = false
+	if _settings_panel != null: _settings_panel.visible = false
 	if _skills_backdrop != null: _skills_backdrop.visible = false
 	_skills_panel.visible = false
 	_editor_panel.visible = false
@@ -166,6 +185,8 @@ func _show_menu() -> void:
 func _hide_menu() -> void:
 	_menu_root.visible = false
 	_level_list_panel.visible = false
+	if _settings_backdrop != null: _settings_backdrop.visible = false
+	if _settings_panel != null: _settings_panel.visible = false
 	if _skills_backdrop != null: _skills_backdrop.visible = false
 	_skills_panel.visible = false
 	_editor_panel.visible = false
@@ -175,6 +196,11 @@ func _hide_menu() -> void:
 	if _crypt_panel != null: _crypt_panel.visible = false
 
 func _on_continue_pressed() -> void:
+	if not GameState.active_run.is_empty():
+		var run_level_id := str(GameState.active_run.get("level_id", ""))
+		if run_level_id != "":
+			_start_level_direct(run_level_id)
+			return
 	var level_id := LevelCatalogScript.get_continue_level_id()
 	if level_id == "":
 		return
@@ -183,6 +209,7 @@ func _on_continue_pressed() -> void:
 func _on_new_game_pressed() -> void:
 	LevelCatalogScript.reset_campaign_progress()
 	GameState.selected_class = "warrior"
+	GameState.active_run = {}
 	SaveSystem.save()
 	var first_level := LevelCatalogScript.get_first_level()
 	if first_level.is_empty():
@@ -236,6 +263,7 @@ func _on_run_finished(result: Dictionary) -> void:
 	GameState.skulls += skulls_earned
 	GameState.boss_tokens += tokens_earned
 
+	GameState.active_run = {}
 	SaveSystem.save()
 	_show_run_summary(result, skulls_earned, tokens_earned)
 
@@ -277,6 +305,8 @@ func _on_main_menu_requested() -> void:
 	if _active_battle != null and is_instance_valid(_active_battle):
 		_active_battle.queue_free()
 		_active_battle = null
+	if RunState.level_id != "":
+		GameState.active_run = RunState.to_dict()
 	SaveSystem.save()
 	_show_menu()
 
@@ -507,6 +537,11 @@ func _save_skill_pool() -> void:
 
 func _ensure_items_codex_ui() -> void:
 	var menu_box: VBoxContainer = $MenuLayer/Root/MenuCard/Margin/VBox
+	_settings_button = Button.new()
+	_settings_button.custom_minimum_size = Vector2(0, 56)
+	menu_box.add_child(_settings_button)
+	menu_box.move_child(_settings_button, _new_game_button.get_index() + 1)
+
 	_items_button = Button.new()
 	_items_button.custom_minimum_size = Vector2(0, 56)
 	menu_box.add_child(_items_button)
@@ -516,6 +551,68 @@ func _ensure_items_codex_ui() -> void:
 	_crypt_button.custom_minimum_size = Vector2(0, 56)
 	menu_box.add_child(_crypt_button)
 	menu_box.move_child(_crypt_button, _items_button.get_index() + 1)
+
+	_settings_backdrop = ColorRect.new()
+	_settings_backdrop.visible = false
+	_settings_backdrop.color = Color(0.03, 0.04, 0.06, 0.88)
+	_settings_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_settings_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	_menu_root.add_child(_settings_backdrop)
+
+	_settings_panel = PanelContainer.new()
+	_settings_panel.visible = false
+	_settings_panel.custom_minimum_size = Vector2(420, 0)
+	_settings_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_settings_panel.set_anchors_preset(Control.PRESET_CENTER)
+	_settings_panel.position = Vector2(-210, -120)
+	_menu_root.add_child(_settings_panel)
+	var settings_panel_style := StyleBoxFlat.new()
+	settings_panel_style.bg_color = Color(0.10, 0.10, 0.12, 0.985)
+	settings_panel_style.border_color = Color(0.24, 0.25, 0.30, 1.0)
+	settings_panel_style.border_width_left = 2
+	settings_panel_style.border_width_top = 2
+	settings_panel_style.border_width_right = 2
+	settings_panel_style.border_width_bottom = 2
+	settings_panel_style.corner_radius_top_left = 18
+	settings_panel_style.corner_radius_top_right = 18
+	settings_panel_style.corner_radius_bottom_left = 18
+	settings_panel_style.corner_radius_bottom_right = 18
+	_settings_panel.add_theme_stylebox_override("panel", settings_panel_style)
+
+	var settings_margin := MarginContainer.new()
+	settings_margin.add_theme_constant_override("margin_left", 22)
+	settings_margin.add_theme_constant_override("margin_top", 22)
+	settings_margin.add_theme_constant_override("margin_right", 22)
+	settings_margin.add_theme_constant_override("margin_bottom", 22)
+	_settings_panel.add_child(settings_margin)
+
+	var settings_box := VBoxContainer.new()
+	settings_box.add_theme_constant_override("separation", 16)
+	settings_margin.add_child(settings_box)
+
+	_settings_title = Label.new()
+	_settings_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_settings_title.add_theme_font_size_override("font_size", 28)
+	_settings_title.add_theme_color_override("font_color", Color(0.952941, 0.823529, 0.478431, 1.0))
+	settings_box.add_child(_settings_title)
+
+	var sound_row := HBoxContainer.new()
+	sound_row.add_theme_constant_override("separation", 12)
+	settings_box.add_child(sound_row)
+
+	_settings_sound_label = Label.new()
+	_settings_sound_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_settings_sound_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_settings_sound_label.add_theme_font_size_override("font_size", 20)
+	sound_row.add_child(_settings_sound_label)
+
+	_settings_sound_toggle = CheckButton.new()
+	_settings_sound_toggle.custom_minimum_size = Vector2(120, 44)
+	sound_row.add_child(_settings_sound_toggle)
+
+	_settings_close_button = Button.new()
+	_settings_close_button.custom_minimum_size = Vector2(0, 52)
+	settings_box.add_child(_settings_close_button)
 
 	_skills_backdrop = ColorRect.new()
 	_skills_backdrop.visible = false
@@ -920,6 +1017,46 @@ func _open_crypt_panel() -> void:
 	_crypt_skulls_label.text = "Skulls: %d" % GameState.skulls
 	_crypt_tokens_label.text = "Tokens: %d" % GameState.boss_tokens
 	_crypt_switch_tab("equipment")
+
+func _open_settings_panel() -> void:
+	if _settings_panel == null:
+		return
+	_refresh_settings_panel()
+	if _settings_backdrop != null:
+		_settings_backdrop.visible = true
+	_settings_panel.visible = true
+	_level_list_panel.visible = false
+	_skills_panel.visible = false
+	_editor_panel.visible = false
+	if _items_panel != null:
+		_items_panel.visible = false
+	if _crypt_panel != null:
+		_crypt_panel.visible = false
+
+func _close_settings_panel() -> void:
+	if _settings_backdrop != null:
+		_settings_backdrop.visible = false
+	if _settings_panel != null:
+		_settings_panel.visible = false
+
+func _refresh_settings_panel() -> void:
+	if _settings_panel == null:
+		return
+	if _settings_title != null:
+		_settings_title.text = Localization.t("menu.settings.title")
+	if _settings_sound_label != null:
+		_settings_sound_label.text = Localization.t("menu.settings.sound")
+	if _settings_close_button != null:
+		_settings_close_button.text = Localization.t("menu.close")
+	if _settings_sound_toggle != null:
+		var is_enabled := bool(GameState.settings.get("audio_enabled", true))
+		_settings_sound_toggle.set_pressed_no_signal(is_enabled)
+		_settings_sound_toggle.text = Localization.t("menu.settings.sound_on") if is_enabled else Localization.t("menu.settings.sound_off")
+
+func _on_sound_toggled(toggled_on: bool) -> void:
+	if _settings_sound_toggle != null:
+		_settings_sound_toggle.text = Localization.t("menu.settings.sound_on") if toggled_on else Localization.t("menu.settings.sound_off")
+	AudioManager.set_enabled(toggled_on)
 
 func _crypt_switch_tab(tab_id: String) -> void:
 	_crypt_active_tab = tab_id

@@ -7,6 +7,16 @@ const SAVE_PATH := "user://save.json"
 
 func _ready() -> void:
 	call_deferred("load_save")
+	# Снимаем RunState после каждого значимого события в забеге
+	EventBus.upgrade_picked.connect(func(_u): call_deferred("_snapshot_run"))
+	EventBus.shop_picked.connect(func(_i): call_deferred("_snapshot_run"))
+	EventBus.wave_cleared.connect(func(_w): call_deferred("_snapshot_run"))
+
+func _snapshot_run() -> void:
+	if RunState.level_id == "":
+		return
+	GameState.active_run = RunState.to_dict()
+	save()
 
 func save() -> void:
 	var data: Dictionary = GameState.to_dict()
@@ -26,9 +36,7 @@ func _on_remote_loaded(data) -> void:
 		_load_local()
 		return
 	GameState.from_dict(data)
-	var localization := get_node_or_null("/root/Localization")
-	if localization:
-		localization.apply_saved_language()
+	_apply_runtime_settings()
 
 func _save_local(data: Dictionary) -> void:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -50,6 +58,12 @@ func _load_local() -> void:
 	if parsed == null or not (parsed is Dictionary):
 		return
 	GameState.from_dict(parsed)
+	_apply_runtime_settings()
+
+func _apply_runtime_settings() -> void:
 	var localization := get_node_or_null("/root/Localization")
 	if localization:
 		localization.apply_saved_language()
+	var audio_manager := get_node_or_null("/root/AudioManager")
+	if audio_manager:
+		audio_manager.apply_saved_settings()

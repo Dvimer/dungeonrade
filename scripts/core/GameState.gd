@@ -22,8 +22,10 @@ var skill_levels: Dictionary = {}   # skill_id -> int (1 = base, 2-5 = upgraded)
 var settings: Dictionary = {
 	"music_volume": 0.7,
 	"sfx_volume": 1.0,
+	"audio_enabled": true,
 	"language": "ru",
 }
+var active_run: Dictionary = {}   # снимок RunState активного забега
 
 func to_dict() -> Dictionary:
 	return {
@@ -44,6 +46,7 @@ func to_dict() -> Dictionary:
 		"unlocked_skill_ids": unlocked_skill_ids,
 		"skill_levels": skill_levels,
 		"settings": settings,
+		"active_run": active_run.duplicate(true),
 	}
 
 func from_dict(data: Dictionary) -> void:
@@ -74,6 +77,8 @@ func from_dict(data: Dictionary) -> void:
 		unlocked_skill_ids = data["unlocked_skill_ids"].duplicate()
 	if data.has("skill_levels") and data["skill_levels"] is Dictionary:
 		skill_levels = data["skill_levels"].duplicate()
+	if data.has("active_run") and data["active_run"] is Dictionary:
+		active_run = data["active_run"].duplicate(true)
 	if data.has("settings") and data["settings"] is Dictionary:
 		var loaded_settings: Dictionary = data["settings"]
 		for key in loaded_settings.keys():

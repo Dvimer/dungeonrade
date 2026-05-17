@@ -8,6 +8,7 @@ const POOL_SIZE := 6
 const TICK_DEBOUNCE := 0.08  # минимальный интервал между chain_tick (сек)
 
 var master_volume: float = 1.0
+var enabled: bool = true
 var _players: Array = []
 var _pool_index: int = 0
 var _tick_cooldown: float = 0.0
@@ -16,6 +17,7 @@ var _sounds: Dictionary = {}
 func _ready() -> void:
 	_create_player_pool()
 	_load_sounds()
+	apply_saved_settings()
 	_connect_events()
 
 func _process(delta: float) -> void:
@@ -49,6 +51,8 @@ func _load_sounds() -> void:
 			push_warning("AudioManager: missing sound file: " + path)
 
 func play(sound_name: String) -> void:
+	if not enabled:
+		return
 	var stream = _sounds.get(sound_name)
 	if stream == null:
 		return
@@ -57,6 +61,25 @@ func play(sound_name: String) -> void:
 	player.stream = stream
 	player.volume_db = linear_to_db(master_volume)
 	player.play()
+
+func set_enabled(value: bool, save_setting: bool = true) -> void:
+	enabled = value
+	GameState.settings["audio_enabled"] = enabled
+	_apply_audio_state()
+	if save_setting:
+		SaveSystem.save()
+
+func apply_saved_settings() -> void:
+	var saved_enabled := bool(GameState.settings.get("audio_enabled", true))
+	set_enabled(saved_enabled, false)
+
+func _apply_audio_state() -> void:
+	for player in _players:
+		if player == null:
+			continue
+		player.volume_db = linear_to_db(master_volume) if enabled else -80.0
+		if not enabled and player.playing:
+			player.stop()
 
 func _connect_events() -> void:
 	EventBus.chain_started.connect(_on_chain_started)
