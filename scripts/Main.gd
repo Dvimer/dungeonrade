@@ -1218,7 +1218,7 @@ func _build_crypt_skills_tab() -> void:
 	_crypt_content_box.add_child(header)
 
 	var grid := GridContainer.new()
-	grid.columns = 3
+	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 12)
 	_crypt_content_box.add_child(grid)
@@ -1226,23 +1226,26 @@ func _build_crypt_skills_tab() -> void:
 	for skill in SkillCatalogScript.get_all_skills():
 		grid.add_child(_make_crypt_skill_card(skill))
 
-func _make_crypt_skill_card(skill: Dictionary) -> Button:
+func _make_crypt_skill_card(skill: Dictionary) -> Control:
 	var skill_id := str(skill.get("id", ""))
 	const SKILL_COST := 20
 	var in_pool := GameState.skill_pool_ids.has(skill_id)
+	var title := Localization.skill_name(skill_id, str(skill.get("title", skill_id)))
+	var icon := Localization.skill_icon_text(skill_id, str(skill.get("icon_text", "*")))
+	var desc := Localization.skill_description(skill_id, str(skill.get("description", "")))
+	var color: Color = skill.get("color", Color(0.7, 0.7, 0.7, 1.0))
+
+	var panel := VBoxContainer.new()
+	panel.add_theme_constant_override("separation", 4)
 
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(300, 100)
-	btn.clip_text = true
-	btn.add_theme_font_size_override("font_size", 16)
-	btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
-
-	var icon := Localization.skill_icon_text(skill_id, str(skill.get("icon_text", "*")))
-	var title := Localization.skill_name(skill_id, str(skill.get("title", skill_id)))
-	var desc := Localization.skill_description(skill_id, str(skill.get("description", "")))
-
+	btn.custom_minimum_size = Vector2(0, 52)
+	btn.add_theme_font_size_override("font_size", 13)
+	btn.add_theme_color_override("font_color", color)
+	btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	if in_pool:
-		btn.text = "%s  %s\n[In pool]" % [icon, title]
+		var meta_level := int(GameState.skill_levels.get(skill_id, 1))
+		btn.text = "%s  %s\n[Pool — Lv %d / %d]" % [icon, title, meta_level, int(skill.get("max_level", 5))]
 		btn.disabled = true
 		btn.modulate = Color(0.6, 0.9, 0.6, 1.0)
 	elif GameState.skulls >= SKILL_COST:
@@ -1253,7 +1256,30 @@ func _make_crypt_skill_card(skill: Dictionary) -> Button:
 		btn.text = "%s  %s\n%s skulls (need more)" % [icon, title, SKILL_COST]
 		btn.disabled = true
 		btn.modulate = Color(0.55, 0.55, 0.55, 1.0)
-	return btn
+	panel.add_child(btn)
+
+	if in_pool:
+		var meta_level := int(GameState.skill_levels.get(skill_id, 1))
+		var max_level := int(skill.get("max_level", 5))
+		var upgrades: Array = SkillCatalogScript.DEFINITIONS.get(skill_id, {}).get("upgrades", [])
+		if meta_level < max_level and upgrades.size() >= meta_level:
+			var next_upgrade: Dictionary = upgrades[meta_level - 1]
+			var next_desc := Localization.t(str(next_upgrade.get("desc_key", "")), [])
+			var cost := SkillCatalogScript.upgrade_cost(SkillCatalogScript.DEFINITIONS.get(skill_id, {}), meta_level + 1)
+			var upgrade_btn := Button.new()
+			upgrade_btn.custom_minimum_size = Vector2(0, 32)
+			upgrade_btn.add_theme_font_size_override("font_size", 12)
+			if GameState.skulls >= cost:
+				upgrade_btn.text = "Upgrade: %s  (%d skulls)" % [next_desc, cost]
+				upgrade_btn.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3, 1.0))
+				upgrade_btn.pressed.connect(_upgrade_skill.bind(skill_id, cost))
+			else:
+				upgrade_btn.text = "Upgrade: %s  (%d skulls needed)" % [next_desc, cost]
+				upgrade_btn.disabled = true
+				upgrade_btn.modulate = Color(0.55, 0.55, 0.55, 1.0)
+			panel.add_child(upgrade_btn)
+
+	return panel
 
 func _unlock_skill(skill_id: String, cost: int, btn: Button) -> void:
 	if GameState.skulls < cost:
@@ -1265,10 +1291,21 @@ func _unlock_skill(skill_id: String, cost: int, btn: Button) -> void:
 	GameState.unlocked_skill_ids.append(skill_id)
 	SaveSystem.save()
 	_crypt_skulls_label.text = "Skulls: %d" % GameState.skulls
-	btn.text = btn.text.split("\n")[0] + "\n[In pool]"
-	btn.modulate = Color(0.6, 0.9, 0.6, 1.0)
-	btn.disabled = true
-	btn.set_pressed_no_signal(false)
+	_crypt_switch_tab("skills")
+
+func _upgrade_skill(skill_id: String, cost: int) -> void:
+	if GameState.skulls < cost:
+		return
+	var base_def: Dictionary = SkillCatalogScript.DEFINITIONS.get(skill_id, {})
+	var max_level := int(base_def.get("max_level", 5))
+	var current_level := int(GameState.skill_levels.get(skill_id, 1))
+	if current_level >= max_level:
+		return
+	GameState.skulls -= cost
+	GameState.skill_levels[skill_id] = current_level + 1
+	SaveSystem.save()
+	_crypt_skulls_label.text = "Skulls: %d" % GameState.skulls
+	_crypt_switch_tab("skills")
 
 func _refresh_items_panel_text() -> void:
 	if _items_panel == null:
