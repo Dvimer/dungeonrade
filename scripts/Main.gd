@@ -1212,7 +1212,7 @@ func _select_class(class_id: String, _panel: Node) -> void:
 
 func _build_crypt_skills_tab() -> void:
 	var header := Label.new()
-	header.text = "Unlock skills to add them to your in-run skill pool. Cost: 20 skulls each."
+	header.text = Localization.t("crypt.skills.header")
 	header.add_theme_color_override("font_color", Color(0.78, 0.78, 0.78, 1.0))
 	header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_crypt_content_box.add_child(header)
@@ -1235,29 +1235,86 @@ func _make_crypt_skill_card(skill: Dictionary) -> Control:
 	var desc := Localization.skill_description(skill_id, str(skill.get("description", "")))
 	var color: Color = skill.get("color", Color(0.7, 0.7, 0.7, 1.0))
 
-	var panel := VBoxContainer.new()
-	panel.add_theme_constant_override("separation", 4)
+	# Card container with border
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(0.10, 0.10, 0.15, 0.95)
+	card_style.border_color = color.darkened(0.3) if in_pool else Color(0.25, 0.25, 0.30, 1.0)
+	card_style.border_width_left = 2
+	card_style.border_width_top = 2
+	card_style.border_width_right = 2
+	card_style.border_width_bottom = 2
+	card_style.corner_radius_top_left = 8
+	card_style.corner_radius_top_right = 8
+	card_style.corner_radius_bottom_left = 8
+	card_style.corner_radius_bottom_right = 8
+	card_style.content_margin_left = 8
+	card_style.content_margin_top = 8
+	card_style.content_margin_right = 8
+	card_style.content_margin_bottom = 8
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", card_style)
 
-	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(0, 52)
-	btn.add_theme_font_size_override("font_size", 13)
-	btn.add_theme_color_override("font_color", color)
-	btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var panel := VBoxContainer.new()
+	panel.add_theme_constant_override("separation", 6)
+	card.add_child(panel)
+
+	# Top row: icon + name + level badge
+	var top_row := HBoxContainer.new()
+	panel.add_child(top_row)
+
+	var icon_lbl := Label.new()
+	icon_lbl.text = icon
+	icon_lbl.add_theme_font_size_override("font_size", 18)
+	icon_lbl.add_theme_color_override("font_color", color)
+	top_row.add_child(icon_lbl)
+
+	var name_lbl := Label.new()
+	name_lbl.text = "  " + title
+	name_lbl.add_theme_font_size_override("font_size", 14)
+	name_lbl.add_theme_color_override("font_color", Color(0.95, 0.94, 1.0))
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_row.add_child(name_lbl)
+
 	if in_pool:
 		var meta_level := int(GameState.skill_levels.get(skill_id, 1))
-		btn.text = "%s  %s\n[Pool — Lv %d / %d]" % [icon, title, meta_level, int(skill.get("max_level", 5))]
+		var max_level := int(skill.get("max_level", 5))
+		var badge := Label.new()
+		badge.text = "Lv %d/%d" % [meta_level, max_level]
+		badge.add_theme_font_size_override("font_size", 11)
+		badge.add_theme_color_override("font_color",
+			Color(1.0, 0.85, 0.3) if meta_level >= max_level else Color(0.52, 1.0, 0.62))
+		top_row.add_child(badge)
+
+	# Description
+	var desc_lbl := Label.new()
+	desc_lbl.text = desc
+	desc_lbl.add_theme_font_size_override("font_size", 11)
+	desc_lbl.add_theme_color_override("font_color", Color(0.70, 0.70, 0.75))
+	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(desc_lbl)
+
+	# Action button
+	var btn := Button.new()
+	btn.custom_minimum_size = Vector2(0, 32)
+	btn.add_theme_font_size_override("font_size", 12)
+	if in_pool:
+		var cur_ml := int(GameState.skill_levels.get(skill_id, 1))
+		var max_ml := int(skill.get("max_level", 5))
+		btn.text = Localization.t("crypt.skills.max_level") if cur_ml >= max_ml else Localization.t("crypt.skills.in_pool")
 		btn.disabled = true
 		btn.modulate = Color(0.6, 0.9, 0.6, 1.0)
 	elif GameState.skulls >= SKILL_COST:
-		btn.text = "%s  %s\n%s skulls" % [icon, title, SKILL_COST]
+		btn.text = Localization.t("crypt.skills.unlock", [SKILL_COST])
+		btn.add_theme_color_override("font_color", Color(0.95, 0.94, 1.0))
 		btn.tooltip_text = desc
 		btn.pressed.connect(_unlock_skill.bind(skill_id, SKILL_COST, btn))
 	else:
-		btn.text = "%s  %s\n%s skulls (need more)" % [icon, title, SKILL_COST]
+		btn.text = Localization.t("crypt.skills.unlock_need", [SKILL_COST])
 		btn.disabled = true
-		btn.modulate = Color(0.55, 0.55, 0.55, 1.0)
+		btn.modulate = Color(0.45, 0.45, 0.45, 1.0)
 	panel.add_child(btn)
 
+	# Upgrade button (only for skills in pool that aren't max level)
 	if in_pool:
 		var meta_level := int(GameState.skill_levels.get(skill_id, 1))
 		var max_level := int(skill.get("max_level", 5))
@@ -1270,16 +1327,16 @@ func _make_crypt_skill_card(skill: Dictionary) -> Control:
 			upgrade_btn.custom_minimum_size = Vector2(0, 32)
 			upgrade_btn.add_theme_font_size_override("font_size", 12)
 			if GameState.skulls >= cost:
-				upgrade_btn.text = "Upgrade: %s  (%d skulls)" % [next_desc, cost]
+				upgrade_btn.text = "▲ %s  (%d 💀)" % [next_desc, cost]
 				upgrade_btn.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3, 1.0))
 				upgrade_btn.pressed.connect(_upgrade_skill.bind(skill_id, cost))
 			else:
-				upgrade_btn.text = "Upgrade: %s  (%d skulls needed)" % [next_desc, cost]
+				upgrade_btn.text = "▲ %s  (%d 💀 нужно)" % [next_desc, cost]
 				upgrade_btn.disabled = true
-				upgrade_btn.modulate = Color(0.55, 0.55, 0.55, 1.0)
+				upgrade_btn.modulate = Color(0.50, 0.50, 0.50, 1.0)
 			panel.add_child(upgrade_btn)
 
-	return panel
+	return card
 
 func _unlock_skill(skill_id: String, cost: int, btn: Button) -> void:
 	if GameState.skulls < cost:
