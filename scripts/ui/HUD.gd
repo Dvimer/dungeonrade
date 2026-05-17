@@ -128,12 +128,25 @@ func _make_skill_card(skill: Dictionary) -> Control:
 	box.offset_bottom = 82
 	panel.add_child(box)
 
+	var meta_level := int(skill.get("meta_level", 1))
+
+	var top_row := HBoxContainer.new()
+	top_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_child(top_row)
+
 	var icon := Label.new()
 	icon.text = Localization.skill_icon_text(skill_id, str(skill.get("icon_text", "SKILL")))
 	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	icon.add_theme_font_size_override("font_size", 16)
 	icon.add_theme_color_override("font_color", border_col)
-	box.add_child(icon)
+	top_row.add_child(icon)
+
+	if meta_level > 1:
+		var meta_lbl := Label.new()
+		meta_lbl.text = " ★%d" % meta_level
+		meta_lbl.add_theme_font_size_override("font_size", 11)
+		meta_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3, 1.0))
+		top_row.add_child(meta_lbl)
 
 	var title := Label.new()
 	title.text = Localization.skill_short_name(skill_id, str(skill.get("short_title", skill.get("title", "Skill"))))
