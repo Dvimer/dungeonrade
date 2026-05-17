@@ -719,7 +719,7 @@ func _preview_kill_positions(path: Array, total_damage: int) -> Array:
 			enemies.append(p)
 	if enemies.is_empty() or total_damage <= 0:
 		return []
-	var per_enemy := int(ceil(float(total_damage) / float(enemies.size())))
+	var per_enemy := total_damage
 	var result := []
 	for ep in enemies:
 		var tile = logic.get_tile(ep)

@@ -99,7 +99,7 @@ static func apply(board: BoardLogic, result: ChainResult, run: Node) -> Array:
 	# Распределяем урон по врагам в цепи поровну (округляя в большую сторону).
 	var kill_gold_bonus := 0
 	if result.damage_to_enemies > 0 and result.enemies_in_chain.size() > 0:
-		var per := int(ceil(float(result.damage_to_enemies) / float(result.enemies_in_chain.size())))
+		var per := result.damage_to_enemies
 		for ep in result.enemies_in_chain:
 			var t = board.get_tile(ep)
 			if t.kind == TileType.Kind.ENEMY:
