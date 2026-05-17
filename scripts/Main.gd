@@ -428,23 +428,28 @@ func _refresh_skills_panel() -> void:
 		_skills_hover_description.text = Localization.t("menu.skills.hover_text")
 
 func _make_skill_pick_button(skill: Dictionary, selected: bool) -> Button:
+	var skill_id := str(skill.get("id", ""))
+	var color: Color = skill.get("color", Color(0.7, 0.7, 0.7, 1.0))
+	var meta_level := int(GameState.skill_levels.get(skill_id, 1))
+	var meta_suffix := (" ★%d" % meta_level) if meta_level > 1 else ""
+
 	var button := Button.new()
 	button.custom_minimum_size = Vector2(140, 92)
 	button.clip_text = true
-	button.text = "%s\n%s" % [
-		Localization.skill_icon_text(str(skill.get("id", "")), str(skill.get("icon_text", "*"))),
-		Localization.skill_short_name(str(skill.get("id", "")), str(skill.get("short_title", skill.get("title", "Skill")))),
+	button.text = "%s%s\n%s" % [
+		Localization.skill_icon_text(skill_id, str(skill.get("icon_text", "*"))),
+		meta_suffix,
+		Localization.skill_short_name(skill_id, str(skill.get("short_title", skill.get("title", "Skill")))),
 	]
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_color_override("font_color", color)
 	button.mouse_entered.connect(_show_skill_hover.bind(skill))
 	if selected:
-		button.modulate = Color(1.0, 1.0, 1.0, 1.0)
-		button.pressed.connect(_on_selected_skill_pressed.bind(str(skill.get("id", ""))))
+		button.pressed.connect(_on_selected_skill_pressed.bind(skill_id))
 	else:
-		button.modulate = Color(0.82, 0.90, 1.0, 0.96)
-		button.pressed.connect(_on_available_skill_pressed.bind(str(skill.get("id", ""))))
+		button.modulate = Color(0.7, 0.7, 0.7, 0.85)
+		button.pressed.connect(_on_available_skill_pressed.bind(skill_id))
 	return button
 
 func _show_skill_hover(skill: Dictionary) -> void:
