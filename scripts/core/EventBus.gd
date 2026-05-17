@@ -39,6 +39,10 @@ signal shop_picked(item)                # Dictionary
 signal skill_tapped(skill_id)           # String — HUD запрашивает активацию
 signal tiles_skill_cleared(positions)   # Array[Vector2] — Battle очищает тайлы
 
+# --- UI подсказки ---
+signal tile_hovered(tile_data: Dictionary)   # ENEMY-тайл под курсором
+signal tile_unhovered()                      # курсор ушёл с тайла
+
 # --- Мета ---
 signal upgrade_offered(choices)         # Array
 signal upgrade_picked(upgrade)
