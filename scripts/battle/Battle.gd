@@ -139,6 +139,14 @@ func _on_tiles_skill_cleared(positions: Array) -> void:
 		return
 	await board.consume_and_refill(positions)
 	board.sync_view()
+	while RunState.pending_skill_sweeps > 0 and board != null and not board.is_animating:
+		RunState.pending_skill_sweeps -= 1
+		var next_positions := RunState.do_pending_sweep(board.logic)
+		if next_positions.is_empty():
+			RunState.pending_skill_sweeps = 0
+			break
+		await board.consume_and_refill(next_positions)
+		board.sync_view()
 
 func _on_player_damaged(_amount: int) -> void:
 	var original := board.position
