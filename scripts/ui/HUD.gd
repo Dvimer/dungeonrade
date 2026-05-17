@@ -76,9 +76,9 @@ func _refresh_all() -> void:
 	_on_rounds_changed(RunState.rounds_left)
 	_refresh_stat_values()
 	_refresh_stats_popup()
-	if _upgrade_overlay:
+	if _upgrade_overlay and not RunState.awaiting_upgrade_choice:
 		_upgrade_overlay.visible = false
-	if _shop_overlay:
+	if _shop_overlay and not RunState.awaiting_shop_choice:
 		_shop_overlay.visible = false
 	_on_tile_unhovered()
 
