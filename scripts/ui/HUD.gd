@@ -36,6 +36,10 @@ var _last_xp: int = -1
 var _last_level: int = -1
 var _last_shop_charge: int = -1
 var _ui_texture_cache: Dictionary = {}
+var _tooltip_panel: PanelContainer = null
+var _tooltip_label: RichTextLabel = null
+var _tooltip_visible: bool = false
+var _tooltip_tween: Tween = null
 
 func _ready() -> void:
 	_menu_button.pressed.connect(func(): EventBus.main_menu_requested.emit())
@@ -57,6 +61,9 @@ func _ready() -> void:
 	_setup_shimmer()
 	_refresh_skill_slots()
 	_refresh_all()
+	_setup_tooltip()
+	EventBus.tile_hovered.connect(_on_tile_hovered)
+	EventBus.tile_unhovered.connect(_on_tile_unhovered)
 
 func _refresh_all() -> void:
 	_apply_localized_texts()
@@ -73,6 +80,7 @@ func _refresh_all() -> void:
 		_upgrade_overlay.visible = false
 	if _shop_overlay:
 		_shop_overlay.visible = false
+	_on_tile_unhovered()
 
 func _refresh_skill_slots() -> void:
 	if _skill_slots == null:
@@ -420,6 +428,43 @@ func _setup_shimmer() -> void:
 	_xp_shimmer = _attach_shimmer(_skill_xp_bar, SKILL_XP_COLOR)
 	_shop_shimmer = _attach_shimmer(_shop_bar, SHOP_COLOR)
 
+func _setup_tooltip() -> void:
+	_tooltip_panel = PanelContainer.new()
+	_tooltip_panel.custom_minimum_size = Vector2(220, 0)
+	_tooltip_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tooltip_panel.visible = false
+	_tooltip_panel.modulate.a = 0.0
+	_tooltip_panel.z_index = 200
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.07, 0.06, 0.14, 0.96)
+	style.border_color = Color(0.58, 0.37, 0.48, 0.95)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 12
+	style.content_margin_top = 10
+	style.content_margin_right = 12
+	style.content_margin_bottom = 10
+	_tooltip_panel.add_theme_stylebox_override("panel", style)
+
+	_tooltip_label = RichTextLabel.new()
+	_tooltip_label.bbcode_enabled = true
+	_tooltip_label.fit_content = true
+	_tooltip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_tooltip_label.custom_minimum_size = Vector2(196, 0)
+	_tooltip_label.add_theme_font_size_override("normal_font_size", 16)
+	_tooltip_label.add_theme_font_size_override("bold_font_size", 17)
+	_tooltip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tooltip_panel.add_child(_tooltip_label)
+
+	$Root.add_child(_tooltip_panel)
+
 func _attach_shimmer(bar: ProgressBar, color: Color) -> ColorRect:
 	if bar == null:
 		return null
@@ -432,6 +477,77 @@ func _attach_shimmer(bar: ProgressBar, color: Color) -> ColorRect:
 	rect.visible = false
 	bar.add_child(rect)
 	return rect
+
+func _on_tile_hovered(tile_data: Dictionary) -> void:
+	_tooltip_label.text = _build_monster_tooltip(tile_data)
+	_tooltip_panel.visible = true
+	_tooltip_visible = true
+	_reposition_tooltip()
+	if _tooltip_tween and _tooltip_tween.is_valid():
+		_tooltip_tween.kill()
+	_tooltip_tween = create_tween()
+	_tooltip_tween.tween_property(_tooltip_panel, "modulate:a", 1.0, 0.12)
+
+func _on_tile_unhovered() -> void:
+	_tooltip_visible = false
+	if _tooltip_panel == null:
+		return
+	if _tooltip_tween and _tooltip_tween.is_valid():
+		_tooltip_tween.kill()
+	_tooltip_tween = create_tween()
+	_tooltip_tween.tween_property(_tooltip_panel, "modulate:a", 0.0, 0.10)
+	_tooltip_tween.tween_callback(func(): _tooltip_panel.visible = false)
+
+func _build_monster_tooltip(data: Dictionary) -> String:
+	var monster_id := str(data.get("monster_id", ""))
+	var name := Localization.monster_name(monster_id, str(data.get("monster_name", "?")))
+	var hp := int(data.get("hp", 0))
+	var dmg := int(data.get("dmg", 0))
+	var defense := int(data.get("defense", 0))
+	var timer := int(data.get("timer", 0))
+
+	var text := ""
+
+	if bool(data.get("is_boss", false)):
+		text += "[color=#ff6666]" + Localization.t("tooltip.enemy.boss") + "[/color]\n"
+
+	text += "[b]" + name + "[/b]\n"
+
+	var info := Localization.t("monster.info", [name, hp, dmg, defense, timer])
+	var parts := info.split("\n")
+	if parts.size() > 1:
+		text += parts[1] + "\n"
+
+	if bool(data.get("heal_on_attack", false)):
+		var ratio := float(data.get("heal_on_attack_ratio", 1.0))
+		text += Localization.t("tooltip.enemy.heal_on_attack", [ratio]) + "\n"
+	if bool(data.get("explode_on_attack", false)):
+		var radius := int(data.get("explosion_radius", 1))
+		var pdmg := int(data.get("explosion_player_damage", 0))
+		text += Localization.t("tooltip.enemy.explode", [radius, pdmg]) + "\n"
+	if bool(data.get("reset_timer_on_hit", false)):
+		text += Localization.t("tooltip.enemy.reset_timer") + "\n"
+	if bool(data.get("remove_on_attack", false)):
+		text += Localization.t("tooltip.enemy.remove_on_attack") + "\n"
+
+	return text.strip_edges()
+
+func _reposition_tooltip() -> void:
+	if _tooltip_panel == null:
+		return
+	var mp := get_viewport().get_mouse_position()
+	var vp_size := get_viewport().get_visible_rect().size
+	var panel_size := _tooltip_panel.get_minimum_size()
+	if panel_size == Vector2.ZERO:
+		panel_size = Vector2(220, 80)
+	var pos := mp + Vector2(16.0, 16.0)
+	pos.x = minf(pos.x, vp_size.x - panel_size.x - 8.0)
+	pos.y = minf(pos.y, vp_size.y - panel_size.y - 8.0)
+	_tooltip_panel.position = pos
+
+func _process(_delta: float) -> void:
+	if _tooltip_visible:
+		_reposition_tooltip()
 
 func _flash_bar(bar: ProgressBar, shimmer: ColorRect) -> void:
 	if bar == null:
