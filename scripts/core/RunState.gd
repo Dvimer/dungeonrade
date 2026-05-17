@@ -37,6 +37,9 @@ var active_skills: Array = []
 var active_equipment: Array = []
 var skill_cooldowns: Dictionary = {}   # skill_id -> turns remaining (0 = ready)
 var next_crit_forced: bool = false
+var next_crit_forced_mult: float = 2.0
+var pending_skill_sweeps: int = 0
+var _pending_sweep_skill_id: String = ""
 var pending_skill_upgrades: int = 0
 var awaiting_upgrade_choice: bool = false
 var offered_upgrades: Array = []
@@ -83,6 +86,9 @@ func reset() -> void:
 	active_equipment = []
 	skill_cooldowns = {}
 	next_crit_forced = false
+	next_crit_forced_mult = 2.0
+	pending_skill_sweeps = 0
+	_pending_sweep_skill_id = ""
 	pending_skill_upgrades = 0
 	awaiting_upgrade_choice = false
 	offered_upgrades = []
@@ -317,7 +323,10 @@ func _apply_skill_pick(skill_id: String) -> void:
 			_recompute_skill_bonuses()
 			return
 	if active_skills.size() < 4:
-		var skill := SkillCatalogScript.get_skill(skill_id)
+		var base_def: Dictionary = SkillCatalogScript.DEFINITIONS.get(skill_id, {})
+		var meta_level: int = int(GameState.skill_levels.get(skill_id, 1))
+		var computed := SkillCatalogScript.compute_at_level(base_def, meta_level)
+		var skill := SkillCatalogScript.localize_skill(computed)
 		skill["level"] = 1
 		active_skills.append(skill)
 		skill_cooldowns[skill_id] = 0
@@ -381,10 +390,14 @@ func activate_skill(skill_id: String, board_logic: BoardLogic) -> bool:
 	if script == null:
 		return false
 	var effect: SkillEffect = script.new()
-	var result: Dictionary = effect.apply(self, board_logic)
+	var result: Dictionary = effect.apply(self, board_logic, skill_data)
 	if bool(result.get("next_crit_set", false)):
 		next_crit_forced = true
 	var tiles_cleared: Array = result.get("tiles_cleared", [])
+	var sweep_count := int(skill_data.get("sweep_count", 1))
+	if sweep_count > 1 and not tiles_cleared.is_empty():
+		pending_skill_sweeps = sweep_count - 1
+		_pending_sweep_skill_id = skill_id
 	if tiles_cleared.size() > 0:
 		EventBus.emit_signal("tiles_skill_cleared", tiles_cleared)
 	var level: int = maxi(1, int(skill_data.get("level", 1)))
@@ -394,6 +407,27 @@ func activate_skill(skill_id: String, board_logic: BoardLogic) -> bool:
 	skill_cooldowns[skill_id] = final_cd
 	EventBus.emit_signal("skills_changed")
 	return true
+
+# Called by Battle after each board refill when pending_skill_sweeps > 0.
+# Returns positions to clear (already applies side effects like add_gold).
+func do_pending_sweep(board_logic: BoardLogic) -> Array:
+	if _pending_sweep_skill_id == "":
+		return []
+	var skill_data: Dictionary = {}
+	for s in active_skills:
+		if str(s.get("id", "")) == _pending_sweep_skill_id:
+			skill_data = s
+			break
+	if skill_data.is_empty():
+		_pending_sweep_skill_id = ""
+		return []
+	var effect_id := str(skill_data.get("effect_id", ""))
+	var script = SkillCatalogScript.get_effect_script(effect_id)
+	if script == null:
+		return []
+	var effect: SkillEffect = script.new()
+	var result: Dictionary = effect.apply(self, board_logic, skill_data)
+	return result.get("tiles_cleared", [])
 
 func _has_active_skill(skill_id: String) -> bool:
 	return _skill_level(skill_id) > 0
