@@ -540,7 +540,7 @@ func _is_hoverable_tile(tile: Tile) -> bool:
 	if tile == null:
 		return false
 	if tile.data.kind == TileType.Kind.ENEMY:
-		return bool(tile.data.get("is_boss", false))
+		return true
 	return _is_hoverable_kind(tile.data.kind)
 
 func _setup_hover_info() -> void:
