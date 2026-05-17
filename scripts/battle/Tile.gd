@@ -300,6 +300,10 @@ func set_hovered(on: bool) -> void:
 	if on == hovered:
 		return
 	hovered = on
+	if on and data.get("kind", TileType.Kind.EMPTY) == TileType.Kind.ENEMY:
+		EventBus.tile_hovered.emit(data)
+	elif not on:
+		EventBus.tile_unhovered.emit()
 	if on:
 		_idle_offset_y = 0.0
 		_hover_glow_alpha = 0.34
