@@ -18,6 +18,7 @@ var skulls: int = 0
 var boss_tokens: int = 0
 var unlocked_item_ids: Array = []
 var unlocked_skill_ids: Array = []
+var skill_levels: Dictionary = {}   # skill_id -> int (1 = base, 2-5 = upgraded)
 var settings: Dictionary = {
 	"music_volume": 0.7,
 	"sfx_volume": 1.0,
@@ -41,6 +42,7 @@ func to_dict() -> Dictionary:
 		"boss_tokens": boss_tokens,
 		"unlocked_item_ids": unlocked_item_ids,
 		"unlocked_skill_ids": unlocked_skill_ids,
+		"skill_levels": skill_levels,
 		"settings": settings,
 	}
 
@@ -70,6 +72,8 @@ func from_dict(data: Dictionary) -> void:
 		unlocked_item_ids = data["unlocked_item_ids"].duplicate()
 	if data.has("unlocked_skill_ids") and data["unlocked_skill_ids"] is Array:
 		unlocked_skill_ids = data["unlocked_skill_ids"].duplicate()
+	if data.has("skill_levels") and data["skill_levels"] is Dictionary:
+		skill_levels = data["skill_levels"].duplicate()
 	if data.has("settings") and data["settings"] is Dictionary:
 		var loaded_settings: Dictionary = data["settings"]
 		for key in loaded_settings.keys():
