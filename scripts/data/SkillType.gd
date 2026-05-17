@@ -12,6 +12,7 @@ var skill_kind: String = "passive"
 var cooldown_base: int = 0
 var cooldown_reduction_per_level: int = 1
 var effect_id: String = ""
+var animation_id: String = ""
 
 func _init(data: Dictionary = {}) -> void:
 	id = str(data.get("id", id))
@@ -25,6 +26,7 @@ func _init(data: Dictionary = {}) -> void:
 	cooldown_base = int(data.get("cooldown_base", cooldown_base))
 	cooldown_reduction_per_level = int(data.get("cooldown_reduction_per_level", cooldown_reduction_per_level))
 	effect_id = str(data.get("effect_id", effect_id))
+	animation_id = str(data.get("animation_id", animation_id))
 
 func to_dictionary() -> Dictionary:
 	return {
@@ -39,4 +41,5 @@ func to_dictionary() -> Dictionary:
 		"cooldown_base": cooldown_base,
 		"cooldown_reduction_per_level": cooldown_reduction_per_level,
 		"effect_id": effect_id,
+		"animation_id": animation_id,
 	}

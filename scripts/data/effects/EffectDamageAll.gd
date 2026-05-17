@@ -1,6 +1,6 @@
 extends SkillEffect
 
-func apply(run: Node, board_logic: BoardLogic) -> Dictionary:
+func apply(run: Node, board_logic: BoardLogic, skill: Dictionary) -> Dictionary:
 	var dmg: int = run.sword_power()
 	var total := 0
 	var to_clear: Array = []

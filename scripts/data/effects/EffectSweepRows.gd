@@ -1,7 +1,7 @@
 extends SkillEffect
 
 # Собирает всё содержимое двух нижних рядов доски.
-func apply(run: Node, board_logic: BoardLogic) -> Dictionary:
+func apply(run: Node, board_logic: BoardLogic, skill: Dictionary) -> Dictionary:
 	var positions: Array = []
 	var gold := 0
 	var healed := 0

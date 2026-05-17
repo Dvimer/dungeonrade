@@ -1,6 +1,6 @@
 extends SkillEffect
 
-func apply(run: Node, board_logic: BoardLogic) -> Dictionary:
+func apply(run: Node, board_logic: BoardLogic, skill: Dictionary) -> Dictionary:
 	var positions: Array = []
 	var gold := 0
 	for y in range(board_logic.height):
