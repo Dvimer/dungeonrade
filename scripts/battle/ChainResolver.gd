@@ -14,6 +14,12 @@ const COMBO_THRESHOLDS := [
 	{"len": 4, "label": "great",   "mult": 1.2},
 ]
 
+# --- ЧЕКЛИСТ при добавлении нового TileType.Kind ---
+# 1. TileType.gd    : добавить в Kind, SPAWN_WEIGHTS, name_of(); can_link() если линкуется с другим типом
+# 2. Здесь resolve(): добавить счётчик var, кейс в match, включить в resource_count
+# 3. ChainResult.gd : добавить поле для нового ресурса (например: var mana_gained: int = 0)
+# 4. Здесь apply()  : добавить run.add_xxx(result.xxx_gained)
+# 5. Board.gd       : добавить визуал тайла (текстура, цвет)
 static func resolve(board: BoardLogic, path: Array, run: Node) -> ChainResult:
 	var result := ChainResult.new()
 	result.consumed_positions = path.duplicate()
@@ -56,8 +62,10 @@ static func resolve(board: BoardLogic, path: Array, run: Node) -> ChainResult:
 	if randf() < crit_chance:
 		result.crit = true
 	# Форсированный крит от активного навыка
+	var _forced_crit := false
 	if not result.crit and "next_crit_forced" in run and bool(run.next_crit_forced):
 		result.crit = true
+		_forced_crit = true
 		run.next_crit_forced = false
 
 	# --- Урон ---
@@ -65,7 +73,11 @@ static func resolve(board: BoardLogic, path: Array, run: Node) -> ChainResult:
 		var base_dmg := _attack_base_damage(run, swords)
 		var dmg := int(round(base_dmg * mult))
 		if result.crit:
-			dmg = int(round(dmg * 2.0))
+			var crit_mult := 2.0
+			if _forced_crit and "next_crit_forced_mult" in run:
+				crit_mult = float(run.next_crit_forced_mult)
+				run.next_crit_forced_mult = 2.0
+			dmg = int(round(dmg * crit_mult))
 		result.damage_to_enemies = dmg
 
 	# --- Щит ---
